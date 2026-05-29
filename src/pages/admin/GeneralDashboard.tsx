@@ -101,27 +101,41 @@ export const GeneralDashboard = () => {
   const [activeTab, setActiveTab] = useState<'salons' | 'clients'>('salons');
   const [clientSearch, setClientSearch] = useState('');
 
-  // States for password updating
-  const [selectedClientForPassword, setSelectedClientForPassword] = useState<Client | null>(null);
-  const [newClientPassword, setNewClientPassword] = useState('');
-  const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
+  // States for client editing
+  const [selectedClientForEdit, setSelectedClientForEdit] = useState<Client | null>(null);
+  const [editClientName, setEditClientName] = useState('');
+  const [editClientEmail, setEditClientEmail] = useState('');
+  const [editClientPhone, setEditClientPhone] = useState('');
+  const [editClientRole, setEditClientRole] = useState<'CLIENT' | 'ADMIN' | 'SUPER_ADMIN'>('CLIENT');
+  const [editClientSalonId, setEditClientSalonId] = useState('');
+  const [editClientPassword, setEditClientPassword] = useState('');
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
 
-  const handleSavePassword = async (e: React.FormEvent) => {
+  const handleSaveClientEdit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedClientForPassword) return;
-    if (!newClientPassword.trim()) {
-      showNotification('error', 'A senha não pode estar em branco.');
+    if (!selectedClientForEdit) return;
+    if (!editClientName.trim()) {
+      showNotification('error', 'O nome não pode estar em branco.');
+      return;
+    }
+    if (!editClientEmail.trim()) {
+      showNotification('error', 'O e-mail não pode estar em branco.');
       return;
     }
     try {
-      await updateClient(selectedClientForPassword.id, {
-        password: newClientPassword.trim()
+      await updateClient(selectedClientForEdit.id, {
+        name: editClientName.trim(),
+        email: editClientEmail.toLowerCase().trim(),
+        phone: editClientPhone.trim(),
+        role: editClientRole,
+        salonId: editClientRole === 'ADMIN' ? editClientSalonId : '',
+        password: editClientPassword.trim()
       });
-      showNotification('success', `Senha do usuário "${selectedClientForPassword.name}" alterada com sucesso!`);
-      setIsPasswordModalOpen(false);
-      setSelectedClientForPassword(null);
+      showNotification('success', `Cadastro do usuário "${editClientName}" atualizado com sucesso!`);
+      setIsEditModalOpen(false);
+      setSelectedClientForEdit(null);
     } catch (err: any) {
-      showNotification('error', err.message || 'Erro ao alterar a senha.');
+      showNotification('error', err.message || 'Erro ao atualizar o cadastro.');
     }
   };
 
@@ -817,14 +831,19 @@ export const GeneralDashboard = () => {
                             <button
                               type="button"
                               onClick={() => {
-                                setSelectedClientForPassword(client);
-                                setNewClientPassword(client.password || '');
-                                setIsPasswordModalOpen(true);
+                                setSelectedClientForEdit(client);
+                                setEditClientName(client.name || '');
+                                setEditClientEmail(client.email || '');
+                                setEditClientPhone(client.phone || '');
+                                setEditClientRole(client.role || 'CLIENT');
+                                setEditClientSalonId(client.salonId || '');
+                                setEditClientPassword(client.password || '');
+                                setIsEditModalOpen(true);
                               }}
                               className="px-2.5 py-1.5 rounded-lg bg-pink-500/10 hover:bg-pink-500/20 text-pink-400 border border-pink-500/20 text-[10.5px] font-bold tracking-wide uppercase transition-colors inline-flex items-center space-x-1 cursor-pointer"
                             >
                               <Settings className="w-3.5 h-3.5" />
-                              <span>Alterar Senha</span>
+                              <span>Editar Cadastro</span>
                             </button>
                           </td>
                         </tr>
@@ -1059,36 +1078,36 @@ export const GeneralDashboard = () => {
         </div>
       )}
 
-      {/* PASSWORD CHANGE MODAL */}
-      {isPasswordModalOpen && selectedClientForPassword && (
-        <div id="password_change_modal" className="fixed inset-0 z-50 overflow-y-auto flex items-center justify-center p-4">
+      {/* PROFILE AND PERMISSION EDIT MODAL */}
+      {isEditModalOpen && selectedClientForEdit && (
+        <div id="client_edit_modal" className="fixed inset-0 z-50 overflow-y-auto flex items-center justify-center p-4">
           
           {/* Overlay background panel */}
           <div 
             className="fixed inset-0 bg-black/80 backdrop-blur-sm transition-opacity"
             onClick={() => {
-              setIsPasswordModalOpen(false);
-              setSelectedClientForPassword(null);
+              setIsEditModalOpen(false);
+              setSelectedClientForEdit(null);
             }}
           ></div>
 
           {/* Modal Content Frame */}
-          <div className="relative bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-md p-6 md:p-8 shadow-2xl relative z-10 overflow-hidden">
+          <div className="relative bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-md p-6 shadow-2xl relative z-10 overflow-hidden max-h-[92vh] flex flex-col">
             
             {/* Background absolute decorations */}
             <div className="absolute top-0 left-0 w-full h-1.5 bg-gradient-to-r from-pink-500 to-rose-600"></div>
 
-            <div className="flex justify-between items-center mb-6">
+            <div className="flex justify-between items-center mb-5 shrink-0">
               <div>
-                <h3 className="text-base font-black text-white">ALTERAR SENHA</h3>
+                <h3 className="text-base font-black text-white">EDITAR CADASTRO DO USUÁRIO</h3>
                 <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mt-0.5">
-                  Atualizar credenciais de acesso
+                  Atualizar permissões e dados cadastrais
                 </p>
               </div>
               <button 
                 onClick={() => {
-                  setIsPasswordModalOpen(false);
-                  setSelectedClientForPassword(null);
+                  setIsEditModalOpen(false);
+                  setSelectedClientForEdit(null);
                 }}
                 className="text-slate-400 hover:text-white p-1 rounded-lg bg-slate-800 hover:bg-slate-700 transition-colors pointer-events-auto cursor-pointer"
               >
@@ -1096,46 +1115,113 @@ export const GeneralDashboard = () => {
               </button>
             </div>
 
-            <form onSubmit={handleSavePassword} className="space-y-4">
+            <form onSubmit={handleSaveClientEdit} className="space-y-4 overflow-y-auto pr-1 flex-1">
               
               <div className="bg-slate-950 p-4 border border-slate-800/80 rounded-xl space-y-1">
-                <span className="block text-[9px] uppercase font-bold text-slate-500 tracking-wider">Usuário selecionado:</span>
-                <span className="block text-xs font-bold text-slate-200">{selectedClientForPassword.name}</span>
-                <span className="block text-[11px] text-pink-400 font-mono">{selectedClientForPassword.email}</span>
-                <span className="inline-block mt-1 px-2 py-0.5 rounded text-[9px] font-bold bg-slate-800 text-slate-400 uppercase">
-                  {selectedClientForPassword.role || 'CLIENT'}
-                </span>
+                <span className="block text-[9px] uppercase font-bold text-slate-500 tracking-wider">ID Único do Usuário:</span>
+                <span className="block text-xs font-mono text-pink-400 font-bold">{selectedClientForEdit.id}</span>
               </div>
 
               <div className="space-y-1.5">
-                <label className="block text-[10px] text-slate-400 uppercase tracking-wider font-extrabold">Nova Senha</label>
+                <label className="block text-[10px] text-slate-400 uppercase tracking-wider font-extrabold">Nome Completo</label>
                 <input 
                   type="text"
-                  placeholder="Ex: SenhaModificada456"
-                  value={newClientPassword}
-                  onChange={(e) => setNewClientPassword(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-pink-500 font-medium"
+                  value={editClientName}
+                  onChange={(e) => setEditClientName(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-pink-500 font-medium"
                   required
                 />
-                <p className="text-[9px] text-slate-500 leading-normal">
-                  Insira a nova senha de login que o usuário usará para se autenticar.
-                </p>
               </div>
 
-              <div className="pt-4 flex space-x-3 justify-end">
+              <div className="space-y-1.5">
+                <label className="block text-[10px] text-slate-400 uppercase tracking-wider font-extrabold">E-mail de Login</label>
+                <input 
+                  type="email"
+                  value={editClientEmail}
+                  onChange={(e) => setEditClientEmail(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-pink-500 font-medium font-mono"
+                  required
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="block text-[10px] text-slate-400 uppercase tracking-wider font-extrabold">Telefone / WhatsApp</label>
+                <input 
+                  type="text"
+                  placeholder="Ex: (11) 98765-4321"
+                  value={editClientPhone}
+                  onChange={(e) => setEditClientPhone(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-pink-500 font-medium"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="block text-[10px] text-slate-400 uppercase tracking-wider font-extrabold">Nível de Permissão (Função)</label>
+                <select
+                  value={editClientRole}
+                  onChange={(e) => {
+                    const newRole = e.target.value as 'CLIENT' | 'ADMIN' | 'SUPER_ADMIN';
+                    setEditClientRole(newRole);
+                    if (newRole === 'ADMIN' && !editClientSalonId && salons && salons.length > 0) {
+                      setEditClientSalonId(salons[0].id);
+                    }
+                  }}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-pink-500 font-medium"
+                >
+                  <option value="CLIENT" className="bg-slate-950 text-slate-100">CLIENT (Cliente Geral)</option>
+                  <option value="ADMIN" className="bg-slate-950 text-slate-100">ADMIN (Administrador de Unidade)</option>
+                  <option value="SUPER_ADMIN" className="bg-slate-100/10 text-red-400 bg-slate-950">SUPER_ADMIN (Acesso Total / Admin Geral)</option>
+                </select>
+              </div>
+
+              {editClientRole === 'ADMIN' && (
+                <div className="space-y-1.5 p-3.5 bg-pink-500/5 border border-pink-500/10 rounded-xl">
+                  <label className="block text-[10px] text-pink-400 uppercase tracking-wider font-extrabold">Salão Associado (Unidade)</label>
+                  <select
+                    value={editClientSalonId}
+                    onChange={(e) => setEditClientSalonId(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-pink-500 font-medium"
+                  >
+                    {salons && salons.map(s => (
+                      <option key={s.id} value={s.id} className="bg-slate-950 text-slate-100">
+                        {s.name}
+                      </option>
+                    ))}
+                    {(!salons || salons.length === 0) && (
+                      <option value="" className="bg-slate-950 text-slate-100">Nenhum salão disponível</option>
+                    )}
+                  </select>
+                  <p className="text-[9px] text-slate-500 leading-normal mt-1">
+                    Este usuário terá plenos poderes de gerenciamento e alterará dados e estatísticas apenas desta unidade vinculada.
+                  </p>
+                </div>
+              )}
+
+              <div className="space-y-1.5">
+                <label className="block text-[10px] text-slate-400 uppercase tracking-wider font-extrabold">Senha Administrativa / Acesso</label>
+                <input 
+                  type="text"
+                  placeholder="Defina ou altere a senha"
+                  value={editClientPassword}
+                  onChange={(e) => setEditClientPassword(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-pink-500 font-medium"
+                />
+              </div>
+
+              <div className="pt-4 flex space-x-3 justify-end shrink-0">
                 <button
                   type="button"
                   onClick={() => {
-                    setIsPasswordModalOpen(false);
-                    setSelectedClientForPassword(null);
+                    setIsEditModalOpen(false);
+                    setSelectedClientForEdit(null);
                   }}
-                  className="bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold px-4 py-2.5 rounded-xl transition-all cursor-pointer"
+                  className="bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold px-4 py-2.5 rounded-xl transition-all cursor-pointer font-semibold uppercase tracking-wider"
                 >
                   CANCELAR
                 </button>
                 <button
                   type="submit"
-                  className="bg-pink-600 hover:bg-pink-700 active:bg-pink-800 text-white text-xs font-bold px-5 py-2.5 rounded-xl shadow-md transition-all cursor-pointer"
+                  className="bg-pink-600 hover:bg-pink-700 active:bg-pink-800 text-white text-xs font-bold px-5 py-2.5 rounded-xl shadow-md transition-all cursor-pointer font-semibold uppercase tracking-wider"
                 >
                   SALVAR ALTERAÇÕES
                 </button>

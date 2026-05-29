@@ -405,13 +405,19 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
                   passwordToSet = sData.password || '';
                 } else {
                   const clientsRef = collection(db, 'clients');
-                  const qClient = query(clientsRef, where('email', '==', emailLower), where('role', 'in', ['ADMIN', 'SUPER_ADMIN']));
+                  const qClient = query(clientsRef, where('email', '==', emailLower));
                   const qClientSnap = await getDocs(qClient);
                   if (!qClientSnap.empty) {
-                    const cData = qClientSnap.docs[0].data();
-                    roleToSet = cData.role || 'CLIENT';
-                    nameToSet = cData.name || nameToSet;
-                    passwordToSet = cData.password || '';
+                    const matchedAdminRecord = qClientSnap.docs.find(doc => {
+                      const r = doc.data().role;
+                      return r === 'ADMIN' || r === 'SUPER_ADMIN';
+                    });
+                    if (matchedAdminRecord) {
+                      const cData = matchedAdminRecord.data();
+                      roleToSet = cData.role || 'CLIENT';
+                      nameToSet = cData.name || nameToSet;
+                      passwordToSet = cData.password || '';
+                    }
                   }
                 }
               }
@@ -1498,7 +1504,33 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         }
         return;
       }
+      
       await setDoc(doc(db, 'clients', id), updatedFields, { merge: true });
+
+      // Synchronize role updates with the secure /admins collection
+      const fullDoc = await getDoc(doc(db, 'clients', id));
+      if (fullDoc.exists()) {
+        const clientData = fullDoc.data() as Client;
+        const finalRole = clientData.role;
+        const finalEmail = clientData.email ? clientData.email.toLowerCase().trim() : '';
+        const finalSalonId = clientData.salonId;
+
+        if (finalRole === 'ADMIN' || finalRole === 'SUPER_ADMIN') {
+          await setDoc(doc(db, 'admins', id), {
+            email: finalEmail,
+            role: finalRole,
+            ...(finalSalonId ? { salonId: finalSalonId } : {})
+          }, { merge: true });
+          console.log(`Synced role of user ${id} in admins collection as ${finalRole}`);
+        } else {
+          try {
+            await deleteDoc(doc(db, 'admins', id));
+            console.log(`Removed user ${id} from admins collection because their role is ${finalRole || 'CLIENT'}`);
+          } catch (delErr) {
+            // Document might not have existed
+          }
+        }
+      }
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, `clients/${id}`);
     }
