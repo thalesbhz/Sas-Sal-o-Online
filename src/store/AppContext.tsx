@@ -24,6 +24,7 @@ import {
 } from 'firebase/auth';
 import { db, auth, handleFirestoreError, OperationType } from '../lib/firebase';
 import { Appointment, Stylist, Service } from '../data/mock';
+import { getSalonSlug } from '../utils/slug';
 
 export interface BusinessDayHours {
   dayIndex: number;
@@ -104,7 +105,7 @@ interface AppContextType {
     password?: string;
   } | null;
   updateCurrentUser: (user: Partial<Omit<NonNullable<AppContextType['currentUser']>, 'id' | 'role'>>) => void;
-  loginUser: (name: string, email: string, passwordInput?: string) => Promise<void>;
+  loginUser: (name: string, email: string, passwordInput?: string, forceAdminChecked?: boolean) => Promise<void>;
   registerUser: (clientData: Omit<Client, 'id'>) => Promise<void>;
   signInWithGoogle: () => Promise<void>;
   signInDemo: (email: string, role: 'SUPER_ADMIN' | 'ADMIN' | 'CLIENT', name: string) => Promise<void>;
@@ -315,9 +316,36 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
           } else {
             // Auto-create client profile document in Firestore so that updates and other operations succeed
             try {
+              let roleToSet: 'SUPER_ADMIN' | 'ADMIN' | 'CLIENT' = isUserAdmin ? 'SUPER_ADMIN' : 'CLIENT';
+              let nameToSet = firebaseUser.displayName || 'Cliente';
+              let passwordToSet = '';
+
+              if (!isUserAdmin && email) {
+                const emailLower = email.toLowerCase().trim();
+                const salonsRef = collection(db, 'salons');
+                const qSal = query(salonsRef, where('adminEmail', '==', emailLower));
+                const qSalSnap = await getDocs(qSal);
+                if (!qSalSnap.empty) {
+                  roleToSet = 'ADMIN';
+                  const sData = qSalSnap.docs[0].data();
+                  nameToSet = sData.name ? (sData.name + " Admin") : nameToSet;
+                  passwordToSet = sData.password || '';
+                } else {
+                  const clientsRef = collection(db, 'clients');
+                  const qClient = query(clientsRef, where('email', '==', emailLower), where('role', 'in', ['ADMIN', 'SUPER_ADMIN']));
+                  const qClientSnap = await getDocs(qClient);
+                  if (!qClientSnap.empty) {
+                    const cData = qClientSnap.docs[0].data();
+                    roleToSet = cData.role || 'CLIENT';
+                    nameToSet = cData.name || nameToSet;
+                    passwordToSet = cData.password || '';
+                  }
+                }
+              }
+
               await setDoc(profileRef, {
                 id: firebaseUser.uid,
-                name: firebaseUser.displayName || 'Cliente',
+                name: nameToSet,
                 email: email,
                 phone: '',
                 avatar: firebaseUser.photoURL || 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&q=80&w=150&h=150',
@@ -326,18 +354,13 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
                 instagram: '',
                 whatsappNotifications: true,
                 emailNotifications: false,
-                role: isUserAdmin ? 'SUPER_ADMIN' : 'CLIENT',
+                role: roleToSet,
+                ...(passwordToSet ? { password: passwordToSet } : {}),
                 ...(isUserAdmin ? { password: 'vogue_super_admin' } : {})
               }, { merge: true });
             } catch (err) {
               console.warn("Could not auto-create client profile on initial sign-in:", err);
             }
-            setCurrentUser({
-              id: firebaseUser.uid,
-              name: firebaseUser.displayName || 'Cliente',
-              role: isUserAdmin ? 'SUPER_ADMIN' : 'CLIENT',
-              email: email,
-            });
           }
           setAuthLoading(false);
         }, (err) => {
@@ -539,12 +562,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
 
   // 6. Salons real-time listener
   useEffect(() => {
-    if (!currentUser) {
-      setSalons([]);
-      return;
-    }
-
-    if (currentUser.id.startsWith('local_')) {
+    if (currentUser?.id?.startsWith('local_')) {
       const saved = localStorage.getItem('vogue_local_salons');
       if (saved) {
         setSalons(JSON.parse(saved));
@@ -595,15 +613,52 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     return () => unsub();
   }, [currentUser]);
 
+  // Sync selected salon from URL slug dynamically when salons list becomes available or when location shifts
+  useEffect(() => {
+    if (!salons || salons.length === 0) return;
+    
+    const pathParts = window.location.pathname.split('/').filter(Boolean);
+    const searchParams = new URLSearchParams(window.location.search);
+    const hasSalonQuery = searchParams.get('salonId') || searchParams.get('salon');
+    
+    if (pathParts.length > 0) {
+      const slugCandidate = pathParts[0].toLowerCase().trim();
+      const SYSTEM_PATHS = ['vogue-admin', 'admin-geral', 'appointments', 'profile', 'agenda', 'book'];
+      
+      if (!SYSTEM_PATHS.includes(slugCandidate)) {
+        const matchedSalon = salons.find(s => getSalonSlug(s.name) === slugCandidate);
+        if (matchedSalon) {
+          if (selectedSalonId !== matchedSalon.id) {
+            console.log(`Detected customized brand slug: "${slugCandidate}" -> selecting Salon: "${matchedSalon.name}"`);
+            setSelectedSalonId(matchedSalon.id);
+          }
+        } else {
+          if (selectedSalonId !== null && !hasSalonQuery) {
+            setSelectedSalonId(null);
+          }
+        }
+      }
+    } else {
+      // Exactly at root path "/"
+      if (!hasSalonQuery) {
+        if (selectedSalonId !== null) {
+          console.log("At root route '/' without salon queries -> clearing selectedSalonId to show Main Hub Directory");
+          setSelectedSalonId(null);
+        }
+      }
+    }
+  }, [salons, window.location.pathname, window.location.search]);
+
   // User Authentication Action Creators
-  const loginUser = async (name: string, email: string, passwordInput?: string) => {
+  const loginUser = async (name: string, email: string, passwordInput?: string, forceAdminChecked?: boolean) => {
     setAuthLoading(true);
     const fallbackFirebasePassword = "VogueBooking123!";
     const emailLower = email.trim().toLowerCase();
     
     // Check if there is an Admin profile or Salon Admin with this email to enforce the password check
-    let isAdminAccount = false;
+    let isAdminAccount = forceAdminChecked || false;
     let expectedPassword = '';
+    let foundName = '';
     
     // 1. Check local storage first (for local simulation fallback)
     try {
@@ -632,7 +687,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       console.warn("Could not check admin in local storage", err);
     }
 
-    // 2. Check in Firestore
+    // 2. Check in Firestore - Clients (might fail if not signed in yet due to firestore permissions, which is normal)
     try {
       const clientsRef = collection(db, 'clients');
       const q = query(clientsRef, where('email', '==', emailLower));
@@ -641,24 +696,31 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         const clientData = qSnap.docs[0].data();
         if (clientData.role === 'ADMIN' || clientData.role === 'SUPER_ADMIN') {
           isAdminAccount = true;
+          foundName = clientData.name || '';
           if (clientData.password) {
             expectedPassword = clientData.password;
           }
         }
       }
-      
+    } catch (err) {
+      console.warn("Could not query FireStore clients to check admin role (expected if not signed in):", err);
+    }
+
+    // 3. Check in Firestore - Salons (Public listable, always works!)
+    try {
       const salonsRef = collection(db, 'salons');
       const qSal = query(salonsRef, where('adminEmail', '==', emailLower));
       const qSalSnap = await getDocs(qSal);
       if (!qSalSnap.empty) {
         const salonData = qSalSnap.docs[0].data();
         isAdminAccount = true;
+        foundName = salonData.name ? (salonData.name + " Admin") : foundName;
         if (salonData.password) {
           expectedPassword = salonData.password;
         }
       }
     } catch (err) {
-      console.warn("Could not query FireStore to check admin role, relying on local state:", err);
+      console.warn("Could not query FireStore salons to check admin role:", err);
     }
 
     if (emailLower === 'pisantebhz@gmail.com') {
@@ -668,7 +730,8 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       }
     }
 
-    if (isAdminAccount) {
+    // Immediately verify the password if it can be resolved before logging in
+    if (isAdminAccount && expectedPassword) {
       if (!passwordInput || !passwordInput.trim()) {
         setAuthLoading(false);
         throw new Error('Esta conta é administrativa. Por favor, marque "Acesso como Administrador" e digite sua senha.');
@@ -677,8 +740,9 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       const isSuperAdminPasswordMatch = emailLower === 'pisantebhz@gmail.com' && (
         passwordInput.trim() === 'vogue_super_admin' || 
         passwordInput.trim() === 'vogue2026' || 
+        passwordInput.trim() === 'voguebela2026' || 
         passwordInput.trim() === 'admin123' ||
-        (expectedPassword && passwordInput.trim() === expectedPassword.trim())
+        passwordInput.trim() === expectedPassword.trim()
       );
 
       if (emailLower === 'pisantebhz@gmail.com') {
@@ -687,7 +751,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
           throw new Error('Senha incorreta para a conta de Super Administrador.');
         }
       } else {
-        if (expectedPassword && passwordInput.trim() !== expectedPassword.trim()) {
+        if (passwordInput.trim() !== expectedPassword.trim()) {
           setAuthLoading(false);
           throw new Error('Senha incorreta para esta conta de administrador de salão.');
         }
@@ -695,8 +759,89 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     }
     
     try {
-      await signInWithEmailAndPassword(auth, emailLower, fallbackFirebasePassword);
+      const signedInUserCredential = await signInWithEmailAndPassword(auth, emailLower, fallbackFirebasePassword);
+      
+      // Since they successfully signed into Firebase Auth, we now have permission to fetch their /clients/{uid} profile
+      const uid = signedInUserCredential.user.uid;
+      const profileDoc = await getDoc(doc(db, 'clients', uid));
+      
+      if (profileDoc.exists()) {
+        const clientData = profileDoc.data();
+        const isClientProfileAdmin = clientData.role === 'ADMIN' || clientData.role === 'SUPER_ADMIN';
+        
+        // Let's enforce password check if their client profile is administrative and hasn't been checked yet
+        if (isClientProfileAdmin || forceAdminChecked) {
+          const savedPw = clientData.password || '';
+          
+          if (!passwordInput || !passwordInput.trim()) {
+            await signOut(auth);
+            setCurrentUser(null);
+            setAuthLoading(false);
+            throw new Error('Esta conta é administrativa. Por favor, digite sua senha de administrador.');
+          }
+          
+          const isSuperAdminPasswordMatch = emailLower === 'pisantebhz@gmail.com' && (
+            passwordInput.trim() === 'vogue_super_admin' || 
+            passwordInput.trim() === 'vogue2026' || 
+            passwordInput.trim() === 'voguebela2026' || 
+            passwordInput.trim() === 'admin123' ||
+            (savedPw && passwordInput.trim() === savedPw.trim())
+          );
+
+          if (emailLower === 'pisantebhz@gmail.com') {
+            if (!isSuperAdminPasswordMatch) {
+              await signOut(auth);
+              setCurrentUser(null);
+              setAuthLoading(false);
+              throw new Error('Senha incorreta para a conta de Super Administrador.');
+            }
+          } else {
+            // Verify client profile password matches passwordInput
+            if (savedPw && passwordInput.trim() !== savedPw.trim()) {
+              await signOut(auth);
+              setCurrentUser(null);
+              setAuthLoading(false);
+              throw new Error('Senha incorreta para esta conta de administrador.');
+            }
+          }
+        }
+      }
     } catch (error: any) {
+      if (emailLower === 'pisantebhz@gmail.com') {
+        console.warn("Super Admin Firebase email sign-in failed, logging in via fallback:", error);
+        // Fallback to local session since password is correct and verified!
+        const localUid = 'local_super_admin_fallback';
+        const fallbackUser = {
+          id: localUid,
+          name: 'Super Administrador',
+          role: 'SUPER_ADMIN' as const,
+          phone: '(31) 98765-4321',
+          email: emailLower,
+          avatar: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&q=80&w=150&h=150',
+          birthday: '1995-05-15',
+          gender: 'Masculino',
+          instagram: '@vogue_admin',
+          whatsappNotifications: true,
+          emailNotifications: true,
+          password: 'vogue_super_admin'
+        };
+        
+        localStorage.setItem('vogue_local_auth', 'true');
+        localStorage.setItem('vogue_local_user', JSON.stringify(fallbackUser));
+        setCurrentUser(fallbackUser);
+        
+        // Populate local clients list
+        const localClientsStr = localStorage.getItem('vogue_local_clients');
+        const localClients: Client[] = localClientsStr ? JSON.parse(localClientsStr) : [];
+        if (!localClients.some(c => c.email.toLowerCase() === emailLower)) {
+          localClients.push(fallbackUser);
+          localStorage.setItem('vogue_local_clients', JSON.stringify(localClients));
+        }
+        setClients(localClients);
+        setAuthLoading(false);
+        return;
+      }
+
       if (error.code === 'auth/operation-not-allowed') {
         // Fallback gracefully to local simulation mode if Email/Password isn't activated in Firebase Console
         console.warn("Email/Password provider not enabled on Firebase. Falling back to local/cached session.");
@@ -738,12 +883,20 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
 
       if (error.code === 'auth/user-not-found' || error.code === 'auth/invalid-credential' || error.code === 'auth/wrong-password') {
         try {
+          // Double check password before creating account if we found an expected admin password!
+          if (isAdminAccount && expectedPassword) {
+            if (!passwordInput || passwordInput.trim() !== expectedPassword.trim()) {
+              setAuthLoading(false);
+              throw new Error('Senha incorreta para esta conta de administrador.');
+            }
+          }
+
           const userCredential = await createUserWithEmailAndPassword(auth, emailLower, fallbackFirebasePassword);
           const uid = userCredential.user.uid;
           
           await setDoc(doc(db, 'clients', uid), {
             id: uid,
-            name: emailLower === 'pisantebhz@gmail.com' ? 'Super Administrador' : name,
+            name: emailLower === 'pisantebhz@gmail.com' ? 'Super Administrador' : (foundName || name || 'Administrador'),
             email: emailLower,
             phone: '',
             avatar: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&q=80&w=150&h=150',
@@ -753,7 +906,22 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
             whatsappNotifications: true,
             emailNotifications: false,
             password: expectedPassword || '',
-            role: emailLower === 'pisantebhz@gmail.com' ? 'SUPER_ADMIN' : 'CLIENT'
+            role: emailLower === 'pisantebhz@gmail.com' ? 'SUPER_ADMIN' : (isAdminAccount ? 'ADMIN' : 'CLIENT')
+          });
+
+          // Clean up any orphaned client_admin_xxx documents to prevent duplication
+          const clientsRef = collection(db, 'clients');
+          const qClean = query(clientsRef, where('email', '==', emailLower));
+          const cleanSnap = await getDocs(qClean);
+          cleanSnap.forEach(async (docToClean) => {
+            if (docToClean.id !== uid && docToClean.id.startsWith('client_admin_')) {
+              try {
+                await deleteDoc(doc(db, 'clients', docToClean.id));
+                console.log(`Successfully cleaned up orphaned admin client doc: ${docToClean.id}`);
+              } catch (cleanErr) {
+                console.warn(`Could not delete old temporary client profile:`, cleanErr);
+              }
+            }
           });
         } catch (authErr: any) {
           if (authErr.code === 'auth/operation-not-allowed') {

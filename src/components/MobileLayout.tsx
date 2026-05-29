@@ -3,13 +3,46 @@ import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { Home, Calendar, MessageSquare, User, Building2 } from 'lucide-react';
 import { useAppContext } from '../store/AppContext';
 import { LoginScreen } from './LoginScreen';
+import { getSalonSlug } from '../utils/slug';
 
 export const MobileLayout = () => {
-  const { currentUser, authLoading } = useAppContext();
+  const { currentUser, authLoading, salons, selectedSalonId, setSelectedSalonId } = useAppContext();
   const location = useLocation();
+
+  React.useEffect(() => {
+    if (!salons || salons.length === 0) return;
+    
+    const pathParts = location.pathname.split('/').filter(Boolean);
+    const SYSTEM_PATHS = ['vogue-admin', 'admin-geral', 'appointments', 'profile', 'agenda', 'book'];
+    
+    if (pathParts.length === 1 && !SYSTEM_PATHS.includes(pathParts[0].toLowerCase())) {
+      const slugCandidate = pathParts[0].toLowerCase().trim();
+      const matchedSalon = salons.find(s => getSalonSlug(s.name) === slugCandidate);
+      if (matchedSalon) {
+        if (selectedSalonId !== matchedSalon.id) {
+          console.log(`[MobileLayout] Router path matched brand slug: "${slugCandidate}" -> selecting Salon ID: "${matchedSalon.id}"`);
+          setSelectedSalonId(matchedSalon.id);
+        }
+      } else {
+        if (selectedSalonId !== null) {
+          console.log(`[MobileLayout] Invalid slug "${slugCandidate}" -> clearing selected salon fallback`);
+          setSelectedSalonId(null);
+        }
+      }
+    } else if (pathParts.length === 0) {
+      if (selectedSalonId !== null) {
+        console.log("[MobileLayout] Back to root '/' -> clearing selectedSalonId to show directory hub");
+        setSelectedSalonId(null);
+      }
+    }
+  }, [location.pathname, salons, selectedSalonId, setSelectedSalonId]);
+
+  const pathParts = location.pathname.split('/').filter(Boolean);
+  const isSalonSlug = pathParts.length === 1 && !['vogue-admin', 'admin-geral', 'appointments', 'profile', 'agenda', 'book'].includes(pathParts[0]);
 
   const isPublicRoute = 
     location.pathname === '/' || 
+    isSalonSlug ||
     location.pathname === '/vogue-admin' || 
     location.pathname.startsWith('/agenda');
   const shouldShowLogin = !currentUser && !isPublicRoute;

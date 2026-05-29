@@ -23,6 +23,7 @@ export default function App() {
           {/* Client Mobile UI */}
           <Route element={<MobileLayout />}>
             <Route path="/" element={<ClientHome />} />
+            <Route path="/:salonSlug" element={<ClientHome />} />
             <Route path="/book/:serviceId" element={<ClientBooking />} />
             <Route path="/appointments" element={<ClientAppointments />} />
             {/* Real profile route */}

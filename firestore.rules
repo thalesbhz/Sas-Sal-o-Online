@@ -14,8 +14,9 @@ service cloud.firestore {
 
     function isAdmin() {
       return isSignedIn() && (
-        request.auth.token.email == 'pisantebhz@gmail.com' ||
-        exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+        ('email' in request.auth.token && request.auth.token.email.matches('(?i)^pisantebhz@gmail\\.com$')) ||
+        (exists(/databases/$(database)/documents/clients/$(request.auth.uid)) && 
+         get(/databases/$(database)/documents/clients/$(request.auth.uid)).data.role in ['ADMIN', 'SUPER_ADMIN'])
       );
     }
 
@@ -60,8 +61,8 @@ service cloud.firestore {
     function isValidSalon(data) {
       return data.name is string && data.name.size() > 0 && data.name.size() <= 150 &&
              data.adminEmail is string && data.adminEmail.size() <= 150 &&
-             data.phone is string && data.phone.size() <= 50 &&
-             data.address is string && data.address.size() <= 300 &&
+             (!('phone' in data) || (data.phone is string && data.phone.size() <= 100)) &&
+             (!('address' in data) || (data.address is string && data.address.size() <= 500)) &&
              data.status is string && data.status in ['ATIVO', 'INATIVO'] &&
              (!('createdAt' in data) || (data.createdAt is string && data.createdAt.size() <= 100)) &&
              (!('password' in data) || (data.password is string && data.password.size() <= 100)) &&
@@ -114,7 +115,7 @@ service cloud.firestore {
 
     match /clients/{clientId} {
       allow get: if isSignedIn() && (clientId == request.auth.uid || isAdmin());
-      allow list: if isSignedIn() && (resource.data.id == request.auth.uid || resource.data.email == request.auth.token.email || isAdmin());
+      allow list: if isSignedIn() && (resource.data.id == request.auth.uid || ('email' in request.auth.token && resource.data.email == request.auth.token.email) || isAdmin());
       allow create: if isSignedIn() && isValidId(clientId) && (clientId == request.auth.uid || isAdmin()) && isValidClient(incoming());
       allow update: if isSignedIn() && isValidId(clientId) && (clientId == request.auth.uid || isAdmin()) && isValidClient(incoming());
       allow delete: if isAdmin();
@@ -145,7 +146,7 @@ service cloud.firestore {
     }
 
     match /salons/{salonId} {
-      allow read, list: if isSignedIn();
+      allow read, list: if true;
       allow create, update: if isAdmin() && isValidId(salonId) && isValidSalon(incoming());
       allow delete: if isAdmin();
     }

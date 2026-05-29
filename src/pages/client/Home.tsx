@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { motion } from 'motion/react';
 import * as Icons from 'lucide-react';
 import { useAppContext } from '../../store/AppContext';
+import { getSalonSlug } from '../../utils/slug';
 
 export const ClientHome = () => {
   const navigate = useNavigate();
@@ -78,6 +79,204 @@ export const ClientHome = () => {
     scrollToIndex(nextIdx);
   };
 
+  // State for salon portal directory search
+  const [salonSearchQuery, setSalonSearchQuery] = useState('');
+  const [copiedSalonId, setCopiedSalonId] = useState<string | null>(null);
+
+  // Copy helper for sharing direct salon link
+  const copyDirectLink = (salonName: string, id: string) => {
+    const slug = getSalonSlug(salonName);
+    const url = `${window.location.origin}/${slug}`;
+    navigator.clipboard.writeText(url).then(() => {
+      setCopiedSalonId(id);
+      setTimeout(() => setCopiedSalonId(null), 2000);
+    });
+  };
+
+  if (!selectedSalonId || !activeSalon) {
+    // Show only ATIVO salons in general portal selection list
+    const availableSalons = salons.filter(salon => {
+      const query = salonSearchQuery.toLowerCase();
+      // Safeguard filter or match
+      const nameMatch = salon.name?.toLowerCase().includes(query) || false;
+      const addrMatch = salon.address?.toLowerCase().includes(query) || false;
+      const phoneMatch = salon.phone?.toLowerCase().includes(query) || false;
+      
+      return (salon.status === 'ATIVO') && (nameMatch || addrMatch || phoneMatch);
+    });
+
+    return (
+      <div id="salon_portal_container" className="w-full px-4 sm:px-6 pt-8 pb-12 overflow-x-hidden flex flex-col min-h-screen">
+        {/* Portal Header Accent */}
+        <div className="text-center mb-8">
+          <div className="inline-flex items-center justify-center space-x-1.5 bg-pink-50 border border-pink-100/60 rounded-full px-3.5 py-1 mb-4.5 text-[10px] text-pink-600 font-extrabold tracking-widest uppercase animate-fade-in">
+            <Icons.Sparkles className="w-3.5 h-3.5 text-pink-500 animate-spin" style={{ animationDuration: '3s' }} />
+            <span>Rede de Salões Vogue</span>
+          </div>
+          <h1 className="text-2xl xs:text-3xl font-black text-gray-900 tracking-tight leading-tight">
+            Escolha sua Unidade
+          </h1>
+          <p className="text-xs text-gray-500 mt-2.5 max-w-sm mx-auto leading-relaxed">
+            Selecione uma de nossas filiais premium exclusivas para agendar procedimentos com os melhores especialistas do mercado da beleza.
+          </p>
+        </div>
+
+        {/* Search Bar Input Container */}
+        <div className="relative mb-8 max-w-md mx-auto w-full group">
+          <div className="absolute inset-y-0 left-4 flex items-center pointer-events-none text-gray-400 group-focus-within:text-pink-500 transition-colors">
+            <Icons.Search className="w-4 h-4" />
+          </div>
+          <input
+            type="text"
+            className="w-full bg-white border border-slate-200/90 focus:border-pink-500 focus:ring-4 focus:ring-pink-500/10 rounded-2xl py-3.5 pl-11 pr-12 text-xs font-medium text-gray-800 placeholder-gray-400 outline-none transition-all shadow-xs"
+            placeholder="Pesquisar por nome, endereço ou telefone..."
+            value={salonSearchQuery}
+            onChange={(e) => setSalonSearchQuery(e.target.value)}
+          />
+          {salonSearchQuery && (
+            <button
+              onClick={() => setSalonSearchQuery('')}
+              className="absolute inset-y-0 right-4 flex items-center text-slate-400 hover:text-pink-500 text-xs font-bold transition-colors cursor-pointer"
+            >
+              Limpar
+            </button>
+          )}
+        </div>
+
+        {/* Salons list rendering */}
+        {availableSalons.length === 0 ? (
+          <div className="bg-white border border-slate-100 rounded-[28px] p-10 text-center flex flex-col items-center justify-center max-w-md mx-auto w-full shadow-sm animate-fade-in">
+            <div className="w-14 h-14 bg-pink-50 text-pink-400 rounded-2xl flex items-center justify-center mb-4 border border-pink-100">
+              <Icons.Building2 className="w-6 h-6" />
+            </div>
+            <h3 className="text-xs font-black text-slate-800 uppercase tracking-widest leading-none">Nenhuma unidade encontrada</h3>
+            <p className="text-[10px] text-slate-400 font-semibold mt-2 max-w-[240px] leading-relaxed">
+              Tente redefinir os filtros ou buscar por palavras-chave mais simples, como bairro ou cidade.
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-5 max-w-md mx-auto w-full">
+            {availableSalons.map((salon) => {
+              // Calculate specific statistics for this salon unit
+              const salonServicesCount = globalServices.filter(s => 
+                (s as any).salonId === salon.id || 
+                ((s as any).salonId === 'sal_vogue_main' && salon.id === 'sal_vogue_main')
+              ).length;
+
+              const salonStylists = globalStylists.filter(st => 
+                (st as any).salonId === salon.id ||
+                ((st as any).salonId === 'sal_vogue_main' && salon.id === 'sal_vogue_main')
+              );
+
+              // Calculate active salon ratings
+              const averageRating = salonStylists.length > 0
+                ? (salonStylists.reduce((acc, current) => acc + current.rating, 0) / salonStylists.length).toFixed(1)
+                : "4.9";
+
+              const directUrlSlug = getSalonSlug(salon.name);
+              const isCopied = copiedSalonId === salon.id;
+
+              return (
+                <motion.div
+                  key={salon.id}
+                  className="bg-white border border-slate-100 rounded-[28px] p-5 shadow-[0_4px_25px_rgba(0,0,0,0.015)] hover:border-pink-200/80 hover:shadow-[0_12px_40px_rgba(244,63,94,0.05)] transition-all flex flex-col justify-between"
+                  initial={{ opacity: 0, y: 15 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ type: "spring", stiffness: 120 }}
+                >
+                  {/* Top segment */}
+                  <div className="flex justify-between items-start mb-4">
+                    <div className="p-3 bg-pink-50 text-pink-500 rounded-2xl">
+                      <Icons.Building2 className="w-5 h-5 animate-pulse" style={{ animationDuration: '4s' }} />
+                    </div>
+                    
+                    <span className="inline-flex items-center space-x-1.5 px-2.5 py-1 bg-emerald-500/5 text-emerald-600 rounded-full text-[9px] font-black uppercase tracking-wider border border-emerald-500/15">
+                      <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-ping"></span>
+                      <span>{salon.status}</span>
+                    </span>
+                  </div>
+
+                  <div className="space-y-1 mb-4">
+                    <h2 className="text-base font-black text-slate-900 tracking-tight leading-tight hover:text-pink-500 transition-colors">
+                      {salon.name}
+                    </h2>
+                    <p className="text-[10px] text-gray-500 font-semibold leading-normal flex items-start gap-1.5 pt-1.5">
+                      <Icons.MapPin className="w-3.5 h-3.5 text-pink-500 shrink-0 mt-0.5" />
+                      <span>{salon.address}</span>
+                    </p>
+                    <p className="text-[10px] text-gray-500 font-semibold flex items-center gap-1.5 pt-0.5">
+                      <Icons.Phone className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                      <span>{salon.phone}</span>
+                    </p>
+                  </div>
+
+                  {/* Badges and statistics details */}
+                  <div className="grid grid-cols-3 gap-2 bg-slate-50/60 rounded-2xl p-3 mb-4.5 select-none text-[10px]">
+                    <div className="text-center">
+                      <span className="block text-[8px] font-extrabold text-slate-400 uppercase tracking-widest">Procedimentos</span>
+                      <strong className="block text-xs font-black text-slate-800 mt-0.5">{salonServicesCount}</strong>
+                    </div>
+                    <div className="text-center border-x border-slate-200/60 px-1">
+                      <span className="block text-[8px] font-extrabold text-slate-400 uppercase tracking-widest">Equipe</span>
+                      <strong className="block text-xs font-black text-slate-800 mt-0.5">{salonStylists.length || 3}</strong>
+                    </div>
+                    <div className="text-center">
+                      <span className="block text-[8px] font-extrabold text-slate-400 uppercase tracking-widest">Avaliação</span>
+                      <strong className="block text-xs font-black text-amber-500 flex items-center justify-center gap-0.5 mt-0.5">
+                        <Icons.Star className="w-3.5 h-3.5 text-amber-500 fill-amber-500" />
+                        <span>{averageRating}</span>
+                      </strong>
+                    </div>
+                  </div>
+
+                  {/* Links and interactive footer */}
+                  <div className="flex gap-2 items-center pt-1.5">
+                    {/* Share / Copy link of the salon */}
+                    <button
+                      type="button"
+                      onClick={() => copyDirectLink(salon.name, salon.id)}
+                      className={`px-3 py-3 rounded-2xl border text-[10px] font-black uppercase tracking-wider flex items-center justify-center space-x-1.5 transition-all cursor-pointer select-none shrink-0 ${
+                        isCopied 
+                          ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-600' 
+                          : 'bg-white border-pink-100 hover:bg-pink-50/30 text-pink-500 hover:text-pink-600'
+                      }`}
+                      title="Copiar link direto para esta unidade"
+                    >
+                      {isCopied ? (
+                        <>
+                          <Icons.Check className="w-3.5 h-3.5" />
+                          <span className="hidden xs:inline">Copiado</span>
+                        </>
+                      ) : (
+                        <>
+                          <Icons.Link className="w-3.5 h-3.5" />
+                          <span className="hidden xs:inline">Link Direto</span>
+                        </>
+                      )}
+                    </button>
+
+                    {/* Book Now Button */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedSalonId(salon.id);
+                        navigate('/' + directUrlSlug);
+                      }}
+                      className="flex-1 bg-pink-500 hover:bg-pink-600 text-white font-black text-[10px] py-3.5 px-4 rounded-2xl shadow-md shadow-pink-500/10 hover:scale-[1.01] active:scale-[0.99] transition-all uppercase tracking-wider flex items-center justify-center space-x-2 cursor-pointer"
+                    >
+                      <span>Entrar na Unidade</span>
+                      <Icons.ChevronRight className="w-3.5 h-3.5 font-bold" strokeWidth={3} />
+                    </button>
+                  </div>
+                </motion.div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div className="w-full px-4 sm:px-6 pt-8 pb-4 overflow-x-hidden flex flex-col">
       {/* Header */}
@@ -124,7 +323,10 @@ export const ClientHome = () => {
           </div>
           <button 
             type="button"
-            onClick={() => setSelectedSalonId(null)}
+            onClick={() => {
+              setSelectedSalonId(null);
+              navigate('/');
+            }}
             className="text-[9px] font-extrabold text-pink-600 bg-white hover:bg-pink-50 p-2 px-3 rounded-xl border border-pink-100 transition-all cursor-pointer pointer-events-auto shrink-0 select-none uppercase tracking-wider ml-2 shadow-xs"
           >
             Limpar

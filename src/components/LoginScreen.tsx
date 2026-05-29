@@ -73,7 +73,7 @@ export const LoginScreen = () => {
 
     setIsSubmitting(true);
     try {
-      await loginUser(loginName.trim(), emailTrimmed, loginPassword.trim());
+      await loginUser(loginName.trim(), emailTrimmed, loginPassword.trim(), isAdminLogin);
     } catch (err: any) {
       setError(err?.message || 'Falha ao autenticar.');
     } finally {
@@ -522,12 +522,16 @@ export const LoginScreen = () => {
       </div>
 
       {/* Simulated/Demo Login Hint Footer */}
-      <div className="mt-6 text-center space-y-2">
-        <p className="text-[10px] text-slate-400 font-medium">
-          O login via E-mail usará um <strong>modo de simulação local</strong> se o provedor de e-mail não estiver ativo no seu painel Firebase.
+      <div className="mt-6 text-center space-y-1 bg-slate-50/50 p-3 rounded-2xl border border-slate-100">
+        <p className="text-[10px] text-slate-500 font-semibold uppercase tracking-wider">
+          🔐 Acesso Super Admin Direto (Vercel)
         </p>
-        <p className="text-[10px] text-pink-500 font-bold uppercase tracking-wider">
-          💡 Para uma experiência nativa sincronizada com o banco, utilize o login com o Google!
+        <p className="text-[10.5px] text-slate-600 font-medium leading-relaxed">
+          E-mail: <strong className="text-slate-800">pisantebhz@gmail.com</strong><br />
+          Senha: <strong className="text-pink-600">vogue2026</strong> ou <strong className="text-pink-600">voguebela2026</strong>
+        </p>
+        <p className="text-[9px] text-slate-400 pt-1 leading-normal">
+          Ative a chave <strong>"Acesso de Administrador"</strong> acima, digite as credenciais e clique em Entrar.
         </p>
       </div>
     </div>
