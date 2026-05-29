@@ -96,6 +96,16 @@
         "password": { "type": "string" }
       },
       "required": ["name", "adminEmail", "phone", "address", "status"]
+    },
+    "Admin": {
+      "title": "Admin",
+      "description": "An administrative user record for secure rules lookup",
+      "type": "object",
+      "properties": {
+        "email": { "type": "string", "format": "email" },
+        "role": { "type": "string", "enum": ["SUPER_ADMIN", "ADMIN"] }
+      },
+      "required": ["email", "role"]
     }
   },
   "firestore": {
@@ -126,6 +136,10 @@
     "salons/{salonId}": {
       "schema": "Salon",
       "description": "Registered Salons"
+    },
+    "admins/{adminId}": {
+      "schema": "Admin",
+      "description": "Administrative users access privilege entries"
     }
   }
 }

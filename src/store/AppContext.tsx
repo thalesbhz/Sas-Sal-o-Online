@@ -262,6 +262,12 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
             password: '123',
             salonId: defaultSalonId
           }, { merge: true });
+
+          await setDoc(doc(db, 'admins', defaultAdminUid), {
+            email: 'vogue_admin@vogue.com',
+            role: 'ADMIN',
+            salonId: defaultSalonId
+          }, { merge: true });
         }
       } catch (e) {
         console.warn("Firestore bootstrap skipped or completed:", e);
@@ -296,15 +302,65 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         const email = firebaseUser.email || '';
         const isUserAdmin = email === 'pisantebhz@gmail.com';
         
+        // Check if there is an existing salon admin email matching this email
+        let isSalonAdminResult = false;
+        let matchedSalonId: string | undefined = undefined;
+        try {
+          const salonsRef = collection(db, 'salons');
+          const qSal = query(salonsRef, where('adminEmail', '==', email.toLowerCase().trim()));
+          const qSalSnap = await getDocs(qSal);
+          if (!qSalSnap.empty) {
+            isSalonAdminResult = true;
+            matchedSalonId = qSalSnap.docs[0].id;
+          }
+        } catch (salErr) {
+          console.warn("Could not check salons for admin email on auth change:", salErr);
+        }
+
+        // Synchronize admin status to admins collection
+        if (isUserAdmin || isSalonAdminResult) {
+          try {
+            await setDoc(doc(db, 'admins', firebaseUser.uid), {
+              email: email,
+              role: isUserAdmin ? 'SUPER_ADMIN' : 'ADMIN',
+              ...(matchedSalonId ? { salonId: matchedSalonId } : {})
+            }, { merge: true });
+            console.log("Synchronized privileges to admins collection successfully.");
+          } catch (adminsErr) {
+            console.warn("Failed to write to admins collection:", adminsErr);
+          }
+        }
+
         const profileRef = doc(db, 'clients', firebaseUser.uid);
         
         const clientUnsub = onSnapshot(profileRef, async (profileDoc) => {
           if (profileDoc.exists()) {
             const data = profileDoc.data();
+            const role = isUserAdmin ? 'SUPER_ADMIN' : (data.role || 'CLIENT');
+
+            // Synchronize role and salon match changes if dynamic field is updated
+            if (role === 'SUPER_ADMIN' || role === 'ADMIN') {
+              try {
+                await setDoc(doc(db, 'admins', firebaseUser.uid), {
+                  email: data.email || email,
+                  role: role,
+                  ...(data.salonId ? { salonId: data.salonId } : (matchedSalonId ? { salonId: matchedSalonId } : {}))
+                }, { merge: true });
+              } catch (adminErr) {
+                console.warn("Could not sync role to admins collection inside snapshot:", adminErr);
+              }
+            } else {
+              try {
+                await deleteDoc(doc(db, 'admins', firebaseUser.uid));
+              } catch (adminErr) {
+                // Ignore
+              }
+            }
+
             setCurrentUser({
               id: firebaseUser.uid,
               name: data.name || firebaseUser.displayName || 'Cliente',
-              role: isUserAdmin ? 'SUPER_ADMIN' : (data.role || 'CLIENT'),
+              role: role,
               email: data.email || email,
               phone: data.phone || '',
               avatar: data.avatar || firebaseUser.photoURL || '',
