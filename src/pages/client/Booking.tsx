@@ -220,7 +220,7 @@ export const ClientBooking = () => {
   };
 
   return (
-    <div className="bg-slate-50 min-h-screen flex flex-col relative pb-32">
+    <div className="bg-transparent flex flex-col relative pb-32 max-w-2xl mx-auto w-full">
       {/* Pink Header Top Section */}
       <div className="bg-pink-500 rounded-b-[40px] pt-12 pb-8 px-6 text-white text-center shadow-lg relative shrink-0">
         <div className="flex items-center justify-between mb-6">

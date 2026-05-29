@@ -155,7 +155,7 @@ export const ClientHome = () => {
             </p>
           </div>
         ) : (
-          <div className="space-y-5 max-w-md mx-auto w-full">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 max-w-6xl mx-auto w-full pb-10">
             {availableSalons.map((salon) => {
               // Calculate specific statistics for this salon unit
               const salonServicesCount = globalServices.filter(s => 
@@ -374,7 +374,7 @@ export const ClientHome = () => {
           <p className="text-[10px] text-pink-400 mt-1 font-bold">Acesse a aba de Serviços no Painel Administrativo para cadastrar novos procedimentos.</p>
         </div>
       ) : (
-        <div className="grid grid-cols-4 gap-y-6 gap-x-4 mb-8">
+        <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-5 lg:grid-cols-8 xl:grid-cols-10 gap-y-6 gap-x-4 mb-8">
           {allServices.map((service) => {
             const Icon = (Icons as any)[service.icon] || Icons.HelpCircle;
             return (

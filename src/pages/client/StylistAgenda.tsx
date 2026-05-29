@@ -313,7 +313,7 @@ export const StylistAgenda = () => {
   );
 
   return (
-    <div className="flex-1 flex flex-col p-6 animate-fadeIn pb-24">
+    <div className="flex-1 flex flex-col p-6 animate-fadeIn pb-24 max-w-4xl mx-auto w-full">
       {/* Top action header */}
       <div className="flex items-center justify-between mb-6">
         <div>

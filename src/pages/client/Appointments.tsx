@@ -11,7 +11,7 @@ export const ClientAppointments = () => {
   const myAppointments = appointments.filter(a => a.clientId === currentUser?.id);
 
   return (
-    <div className="px-6 pt-12 pb-24">
+    <div className="px-6 pt-6 pb-24 max-w-2xl mx-auto w-full">
       <h1 className="text-2xl font-bold text-gray-900 mb-6">Meus Agendamentos</h1>
 
       {myAppointments.length === 0 ? (

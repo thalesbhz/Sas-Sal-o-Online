@@ -127,7 +127,7 @@ export const ClientProfile = () => {
   };
 
   return (
-    <div className="px-6 pt-12 pb-24">
+    <div className="px-6 pt-6 pb-24 max-w-2xl mx-auto w-full">
       {/* Header */}
       <div className="flex justify-between items-center mb-6">
         <div>
