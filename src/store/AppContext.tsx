@@ -392,51 +392,88 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
               let roleToSet: 'SUPER_ADMIN' | 'ADMIN' | 'CLIENT' = isUserAdmin ? 'SUPER_ADMIN' : 'CLIENT';
               let nameToSet = firebaseUser.displayName || 'Cliente';
               let passwordToSet = '';
+              let phoneToSet = '';
+              let avatarToSet = firebaseUser.photoURL || 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&q=80&w=150&h=150';
+              let birthdayToSet = '';
+              let genderToSet = 'Feminino';
+              let instagramToSet = '';
+              let whatsappNotificationsToSet = true;
+              let emailNotificationsToSet = false;
+              let salonIdToSet = '';
+
+              let oldDocIdToDelete: string | null = null;
 
               if (!isUserAdmin && email) {
                 const emailLower = email.toLowerCase().trim();
-                const salonsRef = collection(db, 'salons');
-                const qSal = query(salonsRef, where('adminEmail', '==', emailLower));
-                const qSalSnap = await getDocs(qSal);
-                if (!qSalSnap.empty) {
-                  roleToSet = 'ADMIN';
-                  const sData = qSalSnap.docs[0].data();
-                  nameToSet = sData.name ? (sData.name + " Admin") : nameToSet;
-                  passwordToSet = sData.password || '';
+                
+                // Let's first search for ANY pre-existing client record matching this email (often template records like client_admin_*)
+                const clientsRef = collection(db, 'clients');
+                const qClient = query(clientsRef, where('email', '==', emailLower));
+                const qClientSnap = await getDocs(qClient);
+                
+                if (!qClientSnap.empty) {
+                  const oldDoc = qClientSnap.docs[0];
+                  oldDocIdToDelete = oldDoc.id;
+                  const cData = oldDoc.data();
+                  
+                  roleToSet = cData.role || 'CLIENT';
+                  nameToSet = cData.name || nameToSet;
+                  passwordToSet = cData.password || '';
+                  phoneToSet = cData.phone || '';
+                  avatarToSet = cData.avatar || avatarToSet;
+                  birthdayToSet = cData.birthday || '';
+                  genderToSet = cData.gender || genderToSet;
+                  instagramToSet = cData.instagram || '';
+                  whatsappNotificationsToSet = cData.whatsappNotifications !== false;
+                  emailNotificationsToSet = cData.emailNotifications === true;
+                  salonIdToSet = cData.salonId || '';
                 } else {
-                  const clientsRef = collection(db, 'clients');
-                  const qClient = query(clientsRef, where('email', '==', emailLower));
-                  const qClientSnap = await getDocs(qClient);
-                  if (!qClientSnap.empty) {
-                    const matchedAdminRecord = qClientSnap.docs.find(doc => {
-                      const r = doc.data().role;
-                      return r === 'ADMIN' || r === 'SUPER_ADMIN';
-                    });
-                    if (matchedAdminRecord) {
-                      const cData = matchedAdminRecord.data();
-                      roleToSet = cData.role || 'CLIENT';
-                      nameToSet = cData.name || nameToSet;
-                      passwordToSet = cData.password || '';
-                    }
+                  // No pre-existing client record found, let's query salons adminEmail
+                  const salonsRef = collection(db, 'salons');
+                  const qSal = query(salonsRef, where('adminEmail', '==', emailLower));
+                  const qSalSnap = await getDocs(qSal);
+                  if (!qSalSnap.empty) {
+                    roleToSet = 'ADMIN';
+                    salonIdToSet = qSalSnap.docs[0].id;
+                    const sData = qSalSnap.docs[0].data();
+                    nameToSet = sData.name ? (sData.name + " Admin") : nameToSet;
+                    passwordToSet = sData.password || '';
                   }
                 }
               }
 
+              // Set the correct, complete client profile document under the real authenticated UID
               await setDoc(profileRef, {
                 id: firebaseUser.uid,
                 name: nameToSet,
                 email: email,
-                phone: '',
-                avatar: firebaseUser.photoURL || 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&q=80&w=150&h=150',
-                birthday: '',
-                gender: 'Feminino',
-                instagram: '',
-                whatsappNotifications: true,
-                emailNotifications: false,
+                phone: phoneToSet,
+                avatar: avatarToSet,
+                birthday: birthdayToSet,
+                gender: genderToSet,
+                instagram: instagramToSet,
+                whatsappNotifications: whatsappNotificationsToSet,
+                emailNotifications: emailNotificationsToSet,
                 role: roleToSet,
+                ...(salonIdToSet ? { salonId: salonIdToSet } : {}),
                 ...(passwordToSet ? { password: passwordToSet } : {}),
                 ...(isUserAdmin ? { password: 'vogue_super_admin' } : {})
               }, { merge: true });
+
+              // If a template/pre-existing client profile was migrated, delete the duplicate template document
+              if (oldDocIdToDelete && oldDocIdToDelete !== firebaseUser.uid) {
+                try {
+                  await deleteDoc(doc(db, 'clients', oldDocIdToDelete));
+                  try {
+                    await deleteDoc(doc(db, 'admins', oldDocIdToDelete));
+                  } catch (adminDelErr) {
+                    // Document might not have existed in admins
+                  }
+                  console.log(`Successfully migrated stale client profile ${oldDocIdToDelete} to actual uid ${firebaseUser.uid}`);
+                } catch (delErr) {
+                  console.warn("Could not delete legacy client document of migration:", delErr);
+                }
+              }
             } catch (err) {
               console.warn("Could not auto-create client profile on initial sign-in:", err);
             }
@@ -1486,6 +1523,16 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         salonId: finalSalonId,
       };
       await setDoc(clientRef, newClient);
+
+      // Synchronize role of the newly added client to admins collection if applicable
+      if (newClient.role === 'ADMIN' || newClient.role === 'SUPER_ADMIN') {
+        await setDoc(doc(db, 'admins', newClient.id), {
+          email: newClient.email ? newClient.email.toLowerCase().trim() : '',
+          role: newClient.role,
+          ...(newClient.salonId ? { salonId: newClient.salonId } : {})
+        }, { merge: true });
+        console.log(`Synchronized newly created admin profile ${newClient.id} to the admins collection.`);
+      }
     } catch (error) {
       handleFirestoreError(error, OperationType.CREATE, 'clients');
     }
@@ -1653,6 +1700,14 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         phone: salonData.phone,
         avatar: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?auto=format&fit=crop&q=80&w=150&h=150',
         password: salonData.password,
+        salonId: id,
+      }, { merge: true });
+
+      // Synchronize role of the newly added salon admin to the admins collection
+      await setDoc(doc(db, 'admins', adminUid), {
+        email: salonData.adminEmail.toLowerCase().trim(),
+        role: 'ADMIN',
+        salonId: id,
       }, { merge: true });
 
       return id;
@@ -1704,14 +1759,45 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         const emailLower = adminEmailObj.toLowerCase().trim();
         const clientsQuery = query(collection(db, 'clients'), where('email', '==', emailLower));
         const clientsSnap = await getDocs(clientsQuery);
-        clientsSnap.forEach(async (clientDoc) => {
-          const clientRef = doc(db, 'clients', clientDoc.id);
-          await setDoc(clientRef, {
-            name: fields.name ? (fields.name + " Admin") : clientDoc.data().name,
-            phone: fields.phone || clientDoc.data().phone,
-            password: fields.password || clientDoc.data().password,
+        
+        if (!clientsSnap.empty) {
+          clientsSnap.forEach(async (clientDoc) => {
+            const clientRef = doc(db, 'clients', clientDoc.id);
+            await setDoc(clientRef, {
+              name: fields.name ? (fields.name + " Admin") : clientDoc.data().name,
+              phone: fields.phone || clientDoc.data().phone,
+              password: fields.password || clientDoc.data().password,
+              role: 'ADMIN',
+              salonId: id
+            }, { merge: true });
+
+            // Synchronize to the admins collection
+            await setDoc(doc(db, 'admins', clientDoc.id), {
+              email: emailLower,
+              role: 'ADMIN',
+              salonId: id
+            }, { merge: true });
+          });
+        } else {
+          // If no admin client exists for this email, create a template client doc and sync to admins
+          const adminUid = 'client_admin_' + Math.random().toString(36).substring(2, 9);
+          await setDoc(doc(db, 'clients', adminUid), {
+            id: adminUid,
+            name: (fields.name || salonToUpdate?.name || 'Salão') + " Admin",
+            email: emailLower,
+            role: 'ADMIN',
+            phone: fields.phone || salonToUpdate?.phone || '',
+            avatar: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?auto=format&fit=crop&q=80&w=150&h=150',
+            password: fields.password || salonToUpdate?.password || 'VogueBooking123!',
+            salonId: id,
           }, { merge: true });
-        });
+
+          await setDoc(doc(db, 'admins', adminUid), {
+            email: emailLower,
+            role: 'ADMIN',
+            salonId: id,
+          }, { merge: true });
+        }
       }
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, `salons/${id}`);
