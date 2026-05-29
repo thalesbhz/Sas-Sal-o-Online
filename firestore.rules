@@ -38,7 +38,9 @@ service cloud.firestore {
              data.serviceId is string && data.serviceId.size() <= 64 &&
              data.date is string && data.date.size() <= 100 &&
              data.status is string && data.status in ['PENDENTE', 'CONFIRMADO', 'CANCELADO'] &&
-             (!('salonId' in data) || (data.salonId is string && data.salonId.size() <= 128));
+             (!('salonId' in data) || (data.salonId is string && data.salonId.size() <= 128)) &&
+             (!('clientName' in data) || (data.clientName is string && data.clientName.size() <= 150)) &&
+             (!('id' in data) || (data.id is string && data.id.size() <= 128));
     }
 
     function isValidClient(data) {
@@ -114,7 +116,7 @@ service cloud.firestore {
 
     match /clients/{clientId} {
       allow get: if isSignedIn() && (clientId == request.auth.uid || isAdmin());
-      allow list: if isSignedIn() && (resource.data.id == request.auth.uid || ('email' in request.auth.token && resource.data.email == request.auth.token.email) || isAdmin());
+      allow list: if isSignedIn() && (isAdmin() || resource.data.id == request.auth.uid || ('email' in request.auth.token && resource.data.email == request.auth.token.email));
       allow create: if isSignedIn() && isValidId(clientId) && (clientId == request.auth.uid || isAdmin()) && isValidClient(incoming());
       allow update: if isSignedIn() && isValidId(clientId) && (clientId == request.auth.uid || isAdmin()) && isValidClient(incoming());
       allow delete: if isAdmin();
