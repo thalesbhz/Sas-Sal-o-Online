@@ -300,14 +300,15 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         localStorage.removeItem('vogue_local_user');
 
         const email = firebaseUser.email || '';
-        const isUserAdmin = email === 'pisantebhz@gmail.com';
+        const emailLower = email.toLowerCase().trim();
+        const isUserAdmin = emailLower === 'pisantebhz@gmail.com';
         
         // Check if there is an existing salon admin email matching this email
         let isSalonAdminResult = false;
         let matchedSalonId: string | undefined = undefined;
         try {
           const salonsRef = collection(db, 'salons');
-          const qSal = query(salonsRef, where('adminEmail', '==', email.toLowerCase().trim()));
+          const qSal = query(salonsRef, where('adminEmail', '==', emailLower));
           const qSalSnap = await getDocs(qSal);
           if (!qSalSnap.empty) {
             isSalonAdminResult = true;
@@ -321,7 +322,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         if (isUserAdmin || isSalonAdminResult) {
           try {
             await setDoc(doc(db, 'admins', firebaseUser.uid), {
-              email: email,
+              email: emailLower,
               role: isUserAdmin ? 'SUPER_ADMIN' : 'ADMIN',
               ...(matchedSalonId ? { salonId: matchedSalonId } : {})
             }, { merge: true });
