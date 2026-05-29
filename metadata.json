@@ -1,0 +1,6 @@
+{
+  "name": "Beauty Salon Scheduler",
+  "description": "A responsive and scalable beauty salon appointment scheduling system. Features a beautiful mobile layout matching a specific design request, recurring scheduler logic, multi-staff directory, and a dedicated admin view to manage all bookings.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

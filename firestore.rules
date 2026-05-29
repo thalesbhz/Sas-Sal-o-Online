@@ -1,0 +1,148 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Global Safety Net (default-deny catch-all)
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Reuseable, hardened helper primitives
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && (
+        request.auth.token.email == 'pisantebhz@gmail.com' ||
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+      );
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // Standalone Validation Helpers
+    function isValidAppointment(data) {
+      return data.clientId is string && data.clientId.size() <= 64 &&
+             data.stylistId is string && data.stylistId.size() <= 64 &&
+             data.serviceId is string && data.serviceId.size() <= 64 &&
+             data.date is string && data.date.size() <= 100 &&
+             data.status is string && data.status in ['PENDENTE', 'CONFIRMADO', 'CANCELADO'];
+    }
+
+    function isValidClient(data) {
+      return data.name is string && data.name.size() > 0 && data.name.size() <= 150 &&
+             (!('email' in data) || (data.email is string && data.email.size() <= 150)) &&
+             (!('phone' in data) || (data.phone is string && data.phone.size() <= 50)) &&
+             (!('avatar' in data) || (data.avatar is string && data.avatar.size() <= 1000000)) &&
+             (!('birthday' in data) || (data.birthday is string && data.birthday.size() <= 50)) &&
+             (!('gender' in data) || (data.gender is string && data.gender.size() <= 50)) &&
+             (!('instagram' in data) || (data.instagram is string && data.instagram.size() <= 100)) &&
+             (!('whatsappNotifications' in data) || (data.whatsappNotifications is bool)) &&
+             (!('emailNotifications' in data) || (data.emailNotifications is bool)) &&
+             (!('password' in data) || (data.password is string && data.password.size() <= 100)) &&
+             (!('role' in data) || (data.role is string && data.role in ['SUPER_ADMIN', 'ADMIN', 'CLIENT']));
+    }
+    
+    function isValidSalon(data) {
+      return data.name is string && data.name.size() > 0 && data.name.size() <= 150 &&
+             data.adminEmail is string && data.adminEmail.size() <= 150 &&
+             data.phone is string && data.phone.size() <= 50 &&
+             data.address is string && data.address.size() <= 300 &&
+             data.status is string && data.status in ['ATIVO', 'INATIVO'] &&
+             (!('createdAt' in data) || (data.createdAt is string && data.createdAt.size() <= 100)) &&
+             (!('password' in data) || (data.password is string && data.password.size() <= 100)) &&
+             (!('appointmentCount' in data) || (data.appointmentCount is number)) &&
+             (!('clientCount' in data) || (data.clientCount is number));
+    }
+
+    function isValidStylist(data) {
+      return data.name is string && data.name.size() > 0 && data.name.size() <= 150 &&
+             data.avatar is string && data.avatar.size() <= 1000000 &&
+             data.services is list && data.services.size() <= 50 &&
+             data.rating is number && data.rating >= 0 && data.rating <= 5;
+    }
+
+    function isValidService(data) {
+      return data.name is string && data.name.size() > 0 && data.name.size() <= 150 &&
+             data.price is number && data.price >= 0 &&
+             data.durationMinutes is number && data.durationMinutes > 0 &&
+             data.icon is string && data.icon.size() <= 100;
+    }
+
+    function isValidBusinessDay(data) {
+      return data.dayIndex is number && data.dayIndex >= 0 && data.dayIndex <= 6 &&
+             data.dayLabel is string && data.dayLabel.size() <= 50 &&
+             data.isOpen is bool &&
+             data.openTime is string && data.openTime.size() <= 10 &&
+             data.closeTime is string && data.closeTime.size() <= 10;
+    }
+
+    function isValidBanner(data) {
+      return data.discountLabel is string && data.discountLabel.size() <= 100 &&
+             data.title is string && data.title.size() <= 200 &&
+             data.subtitle is string && data.subtitle.size() <= 300 &&
+             data.imageUrl is string && data.imageUrl.size() <= 1000000 &&
+             data.bgColor is string && data.bgColor.size() <= 100;
+    }
+
+    // Rules matching individual collections
+    match /appointments/{appointmentId} {
+      allow get, list: if true;
+      allow create: if isSignedIn() && isValidId(appointmentId) && isValidAppointment(incoming()) && (incoming().clientId == request.auth.uid || isAdmin());
+      allow update: if isSignedIn() && isValidId(appointmentId) && isValidAppointment(incoming()) && (
+        isAdmin() || 
+        (existing().clientId == request.auth.uid && incoming().diff(existing()).affectedKeys().hasOnly(['status']))
+      );
+      allow delete: if isAdmin();
+    }
+
+    match /clients/{clientId} {
+      allow get: if isSignedIn() && (clientId == request.auth.uid || isAdmin());
+      allow list: if isAdmin();
+      allow create: if isSignedIn() && isValidId(clientId) && (clientId == request.auth.uid || isAdmin()) && isValidClient(incoming());
+      allow update: if isSignedIn() && isValidId(clientId) && (clientId == request.auth.uid || isAdmin()) && isValidClient(incoming());
+      allow delete: if isAdmin();
+    }
+
+    match /stylists/{stylistId} {
+      allow read: if true;
+      allow create, update: if isAdmin() && isValidId(stylistId) && isValidStylist(incoming());
+      allow delete: if isAdmin();
+    }
+
+    match /services/{serviceId} {
+      allow read: if true;
+      allow create, update: if isAdmin() && isValidId(serviceId) && isValidService(incoming());
+      allow delete: if isAdmin();
+    }
+
+    match /businessHours/{dayIndex} {
+      allow read: if true;
+      allow create, update: if isAdmin() && isValidId(dayIndex) && isValidBusinessDay(incoming());
+      allow delete: if isAdmin();
+    }
+
+    match /bannerConfig/{configId} {
+      allow read: if true;
+      allow create, update: if isAdmin() && isValidId(configId) && isValidBanner(incoming());
+      allow delete: if isAdmin();
+    }
+
+    match /salons/{salonId} {
+      allow read, list: if isSignedIn();
+      allow create, update: if isAdmin() && isValidId(salonId) && isValidSalon(incoming());
+      allow delete: if isAdmin();
+    }
+  }
+}

@@ -1,0 +1,131 @@
+{
+  "entities": {
+    "Appointment": {
+      "title": "Appointment",
+      "description": "An appointment booked by a client",
+      "type": "object",
+      "properties": {
+        "clientId": { "type": "string" },
+        "clientName": { "type": "string" },
+        "stylistId": { "type": "string" },
+        "serviceId": { "type": "string" },
+        "date": { "type": "string", "format": "date-time" },
+        "status": { "type": "string", "enum": ["PENDENTE", "CONFIRMADO", "CANCELADO"] }
+      },
+      "required": ["clientId", "stylistId", "serviceId", "date", "status"]
+    },
+    "Stylist": {
+      "title": "Stylist",
+      "description": "A beauty hair stylist or professional",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "avatar": { "type": "string" },
+        "services": { "type": "array" },
+        "rating": { "type": "number" }
+      },
+      "required": ["name", "avatar", "services", "rating"]
+    },
+    "Service": {
+      "title": "Service",
+      "description": "A beauty service offered by the salon",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "price": { "type": "number" },
+        "durationMinutes": { "type": "number" },
+        "icon": { "type": "string" }
+      },
+      "required": ["name", "price", "durationMinutes", "icon"]
+    },
+    "Client": {
+      "title": "Client",
+      "description": "A salon customer profile",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "email": { "type": "string", "format": "email" },
+        "phone": { "type": "string" },
+        "avatar": { "type": "string" },
+        "birthday": { "type": "string" },
+        "gender": { "type": "string" },
+        "instagram": { "type": "string" },
+        "whatsappNotifications": { "type": "boolean" },
+        "emailNotifications": { "type": "boolean" },
+        "password": { "type": "string" }
+      },
+      "required": ["name"]
+    },
+    "BusinessDayHours": {
+      "title": "BusinessDayHours",
+      "description": "Hours of work for a single day of the week",
+      "type": "object",
+      "properties": {
+        "dayIndex": { "type": "number" },
+        "dayLabel": { "type": "string" },
+        "isOpen": { "type": "boolean" },
+        "openTime": { "type": "string" },
+        "closeTime": { "type": "string" }
+      },
+      "required": ["dayIndex", "dayLabel", "isOpen", "openTime", "closeTime"]
+    },
+    "BannerConfig": {
+      "title": "BannerConfig",
+      "description": "Promo home banner config",
+      "type": "object",
+      "properties": {
+        "discountLabel": { "type": "string" },
+        "title": { "type": "string" },
+        "subtitle": { "type": "string" },
+        "imageUrl": { "type": "string" },
+        "bgColor": { "type": "string" }
+      },
+      "required": ["discountLabel", "title", "subtitle", "imageUrl", "bgColor"]
+    },
+    "Salon": {
+      "title": "Salon",
+      "description": "A salon tenant registered by super admin",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "adminEmail": { "type": "string", "format": "email" },
+        "phone": { "type": "string" },
+        "address": { "type": "string" },
+        "status": { "type": "string", "enum": ["ATIVO", "INATIVO"] },
+        "createdAt": { "type": "string" },
+        "password": { "type": "string" }
+      },
+      "required": ["name", "adminEmail", "phone", "address", "status"]
+    }
+  },
+  "firestore": {
+    "appointments/{appointmentId}": {
+      "schema": "Appointment",
+      "description": "Booked appointments"
+    },
+    "stylists/{stylistId}": {
+      "schema": "Stylist",
+      "description": "Stylist roster"
+    },
+    "services/{serviceId}": {
+      "schema": "Service",
+      "description": "Offered services"
+    },
+    "clients/{clientId}": {
+      "schema": "Client",
+      "description": "Customer list"
+    },
+    "businessHours/{dayIndex}": {
+      "schema": "BusinessDayHours",
+      "description": "Business weekly layout"
+    },
+    "bannerConfig/banner": {
+      "schema": "BannerConfig",
+      "description": "Primary banner setting"
+    },
+    "salons/{salonId}": {
+      "schema": "Salon",
+      "description": "Registered Salons"
+    }
+  }
+}
