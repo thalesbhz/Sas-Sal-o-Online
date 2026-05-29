@@ -37,7 +37,8 @@ service cloud.firestore {
              data.stylistId is string && data.stylistId.size() <= 64 &&
              data.serviceId is string && data.serviceId.size() <= 64 &&
              data.date is string && data.date.size() <= 100 &&
-             data.status is string && data.status in ['PENDENTE', 'CONFIRMADO', 'CANCELADO'];
+             data.status is string && data.status in ['PENDENTE', 'CONFIRMADO', 'CANCELADO'] &&
+             (!('salonId' in data) || (data.salonId is string && data.salonId.size() <= 128));
     }
 
     function isValidClient(data) {
@@ -51,7 +52,9 @@ service cloud.firestore {
              (!('whatsappNotifications' in data) || (data.whatsappNotifications is bool)) &&
              (!('emailNotifications' in data) || (data.emailNotifications is bool)) &&
              (!('password' in data) || (data.password is string && data.password.size() <= 100)) &&
-             (!('role' in data) || (data.role is string && data.role in ['SUPER_ADMIN', 'ADMIN', 'CLIENT']));
+             (!('role' in data) || (data.role is string && data.role in ['SUPER_ADMIN', 'ADMIN', 'CLIENT'])) &&
+             (!('id' in data) || (data.id is string && data.id.size() <= 128)) &&
+             (!('salonId' in data) || (data.salonId is string && data.salonId.size() <= 128));
     }
     
     function isValidSalon(data) {
@@ -70,14 +73,16 @@ service cloud.firestore {
       return data.name is string && data.name.size() > 0 && data.name.size() <= 150 &&
              data.avatar is string && data.avatar.size() <= 1000000 &&
              data.services is list && data.services.size() <= 50 &&
-             data.rating is number && data.rating >= 0 && data.rating <= 5;
+             data.rating is number && data.rating >= 0 && data.rating <= 5 &&
+             (!('salonId' in data) || (data.salonId is string && data.salonId.size() <= 128));
     }
 
     function isValidService(data) {
       return data.name is string && data.name.size() > 0 && data.name.size() <= 150 &&
              data.price is number && data.price >= 0 &&
              data.durationMinutes is number && data.durationMinutes > 0 &&
-             data.icon is string && data.icon.size() <= 100;
+             data.icon is string && data.icon.size() <= 100 &&
+             (!('salonId' in data) || (data.salonId is string && data.salonId.size() <= 128));
     }
 
     function isValidBusinessDay(data) {
@@ -109,7 +114,7 @@ service cloud.firestore {
 
     match /clients/{clientId} {
       allow get: if isSignedIn() && (clientId == request.auth.uid || isAdmin());
-      allow list: if isAdmin();
+      allow list: if isSignedIn() && (resource.data.id == request.auth.uid || resource.data.email == request.auth.token.email || isAdmin());
       allow create: if isSignedIn() && isValidId(clientId) && (clientId == request.auth.uid || isAdmin()) && isValidClient(incoming());
       allow update: if isSignedIn() && isValidId(clientId) && (clientId == request.auth.uid || isAdmin()) && isValidClient(incoming());
       allow delete: if isAdmin();
