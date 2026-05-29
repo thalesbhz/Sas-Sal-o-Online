@@ -16,7 +16,11 @@ import {
   onAuthStateChanged, 
   signInWithEmailAndPassword, 
   createUserWithEmailAndPassword, 
-  signOut 
+  signOut,
+  GoogleAuthProvider,
+  signInWithPopup,
+  signInWithRedirect,
+  getRedirectResult
 } from 'firebase/auth';
 import { db, auth, handleFirestoreError, OperationType } from '../lib/firebase';
 import { Appointment, Stylist, Service } from '../data/mock';
@@ -103,6 +107,7 @@ interface AppContextType {
   loginUser: (name: string, email: string, passwordInput?: string) => Promise<void>;
   registerUser: (clientData: Omit<Client, 'id'>) => Promise<void>;
   signInWithGoogle: () => Promise<void>;
+  signInDemo: (email: string, role: 'SUPER_ADMIN' | 'ADMIN' | 'CLIENT', name: string) => Promise<void>;
   logoutUser: () => void;
   businessHours: BusinessDayHours[];
   updateBusinessHours: (hours: BusinessDayHours[]) => void;
@@ -261,6 +266,21 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       }
     };
     runBootstrap();
+  }, []);
+
+  // Capture Google redirect sign-in result on mount
+  useEffect(() => {
+    const checkRedirectResult = async () => {
+      try {
+        const result = await getRedirectResult(auth);
+        if (result?.user) {
+          console.log("Completou login via redirecionamento Google:", result.user.email);
+        }
+      } catch (err) {
+        console.warn("Erro ao processar redirecionamento Google (esperado fora de fluxo ativo):", err);
+      }
+    };
+    checkRedirectResult();
   }, []);
 
   // Monitor Auth Changes
@@ -815,14 +835,65 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   const signInWithGoogle = async () => {
     setAuthLoading(true);
     try {
-      const { GoogleAuthProvider, signInWithPopup } = await import('firebase/auth');
       const provider = new GoogleAuthProvider();
-      await signInWithPopup(auth, provider);
+      provider.addScope('email');
+      provider.addScope('profile');
+      
+      try {
+        await signInWithPopup(auth, provider);
+      } catch (popupError: any) {
+        console.warn("Google Sign-In popup falhou ou foi bloqueada. Desviando para redirect:", popupError);
+        const isIframeOrBlocked = 
+          popupError.code === 'auth/popup-blocked' ||
+          popupError.code === 'auth/iframe-start-fail' ||
+          popupError.code === 'auth/web-storage-unsupported' ||
+          popupError.code === 'auth/cancelled-popup-request' ||
+          popupError.message?.includes('popup') ||
+          popupError.message?.includes('iframe');
+          
+        if (isIframeOrBlocked) {
+          await signInWithRedirect(auth, provider);
+        } else {
+          throw popupError;
+        }
+      }
     } catch (error) {
       setAuthLoading(false);
       console.error("Google Sign-In Error. Bypassing or reporting:", error);
       throw error;
     }
+  };
+
+  const signInDemo = async (email: string, role: 'SUPER_ADMIN' | 'ADMIN' | 'CLIENT', name: string) => {
+    setAuthLoading(true);
+    const localUid = 'local_demo_' + Math.random().toString(36).substring(2, 9);
+    const fallbackUser = {
+      id: localUid,
+      name: name,
+      role: role,
+      phone: '(31) 98765-4321',
+      email: email.toLowerCase().trim(),
+      avatar: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?auto=format&fit=crop&q=80&w=150&h=150',
+      birthday: '1995-05-15',
+      gender: 'Feminino',
+      instagram: '@vogue_demo',
+      whatsappNotifications: true,
+      emailNotifications: true,
+    };
+    
+    localStorage.setItem('vogue_local_auth', 'true');
+    localStorage.setItem('vogue_local_user', JSON.stringify(fallbackUser));
+    setCurrentUser(fallbackUser);
+    
+    // Sync local clients list
+    const localClientsStr = localStorage.getItem('vogue_local_clients');
+    const localClients: Client[] = localClientsStr ? JSON.parse(localClientsStr) : [];
+    if (!localClients.some(c => c.email.toLowerCase() === email.toLowerCase())) {
+      localClients.push(fallbackUser);
+      localStorage.setItem('vogue_local_clients', JSON.stringify(localClients));
+    }
+    setClients(localClients);
+    setAuthLoading(false);
   };
 
   const logoutUser = async () => {
@@ -1311,6 +1382,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         updateBannerConfig,
         authLoading,
         signInWithGoogle,
+        signInDemo,
         selectedSalonId,
         setSelectedSalonId
       }}

@@ -3,8 +3,9 @@ import { User, Mail, Sparkles, LogIn, Smartphone, Calendar, Instagram, Check, Ca
 import { useAppContext } from '../store/AppContext';
 
 export const LoginScreen = () => {
-  const { loginUser, registerUser, signInWithGoogle } = useAppContext();
+  const { loginUser, registerUser, signInWithGoogle, signInDemo } = useAppContext();
   const [isLoginTab, setIsLoginTab] = useState(true);
+  const [hasGoogleFailed, setHasGoogleFailed] = useState(false);
   
   // Login Form fields
   const [loginName, setLoginName] = useState('');
@@ -121,12 +122,14 @@ export const LoginScreen = () => {
 
   const handleGoogleLogin = async () => {
     setError(null);
+    setHasGoogleFailed(false);
     setGoogleLoading(true);
     try {
       await signInWithGoogle();
     } catch (err: any) {
       console.error(err);
-      setError('Falha ao autenticar com o Google. Se estiver no iFrame do editor, permita pop-ups ou faça login via nome/e-mail (modo demonstrativo local).');
+      setHasGoogleFailed(true);
+      setError('Falha ao autenticar com o Google. Se estiver no iFrame do editor, permita pop-ups ou use um dos nossos atalhos de Acesso Rápido de simulação abaixo.');
     } finally {
       setGoogleLoading(false);
     }
@@ -492,6 +495,30 @@ export const LoginScreen = () => {
           </svg>
           <span>{googleLoading ? 'Conectando...' : 'Acessar com o Google'}</span>
         </button>
+
+        {hasGoogleFailed && (
+          <div className="bg-gradient-to-r from-indigo-50/40 to-pink-50/40 border border-slate-200/50 rounded-2xl p-4 space-y-2.5 mt-4 text-left">
+            <p className="text-[10px] text-slate-500 font-semibold leading-relaxed">
+              O login com o Google falhou neste iframe. Use os atalhos abaixo para autenticar instantaneamente em modo demonstração local:
+            </p>
+            <div className="grid grid-cols-2 gap-2 text-center pt-0.5">
+              <button
+                type="button"
+                onClick={() => signInDemo('pisantebhz@gmail.com', 'SUPER_ADMIN', 'Administrador')}
+                className="bg-slate-900 hover:bg-slate-800 text-white rounded-xl py-2 px-2 text-[10px] font-extrabold uppercase tracking-wider transition-all duration-150 cursor-pointer shadow-xs active:scale-95"
+              >
+                Atalho Admin
+              </button>
+              <button
+                type="button"
+                onClick={() => signInDemo('cliente_teste@exemplo.com', 'CLIENT', 'Juliana Ramos')}
+                className="bg-pink-500 hover:bg-pink-600 text-white rounded-xl py-2 px-2 text-[10px] font-extrabold uppercase tracking-wider transition-all duration-150 cursor-pointer shadow-xs active:scale-95"
+              >
+                Atalho Cliente
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Simulated/Demo Login Hint Footer */}
