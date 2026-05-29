@@ -109,6 +109,7 @@ export const AdminDashboard = () => {
     addService, 
     updateStylist, 
     removeService, 
+    updateService, 
     currentUser, 
     authLoading,
     updateAppointmentStatus,
@@ -293,6 +294,7 @@ export const AdminDashboard = () => {
   const [showNewServiceForm, setShowNewServiceForm] = useState(false);
   const [showDashboardServiceForm, setShowDashboardServiceForm] = useState(false);
   const [newService, setNewService] = useState({ name: '', price: '', durationMinutes: '', icon: 'Scissors' });
+  const [editingServiceId, setEditingServiceId] = useState<string | null>(null);
 
   const getServiceIcon = (iconName: string) => {
     const iconObj = SALON_ICONS.find(i => i.name === iconName);
@@ -346,12 +348,22 @@ export const AdminDashboard = () => {
     const price = parseFloat(newService.price) || 0;
     const durationMinutes = parseInt(newService.durationMinutes) || 30;
     
-    addService({
-      name: newService.name,
-      price,
-      durationMinutes,
-      icon: newService.icon || 'Scissors'
-    });
+    if (editingServiceId) {
+      updateService(editingServiceId, {
+        name: newService.name,
+        price,
+        durationMinutes,
+        icon: newService.icon || 'Scissors'
+      });
+      setEditingServiceId(null);
+    } else {
+      addService({
+        name: newService.name,
+        price,
+        durationMinutes,
+        icon: newService.icon || 'Scissors'
+      });
+    }
     
     setNewService({ name: '', price: '', durationMinutes: '', icon: 'Scissors' });
     setShowNewServiceForm(false);
@@ -904,6 +916,7 @@ export const AdminDashboard = () => {
                   onClick={() => {
                     setShowDashboardServiceForm(prev => !prev);
                     setNewService({ name: '', price: '', durationMinutes: '', icon: 'Scissors' });
+                    setEditingServiceId(null);
                   }}
                   className="flex items-center text-[10px] sm:text-[11px] font-extrabold text-indigo-600 bg-indigo-50/70 hover:bg-indigo-100 px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-xl transition-all border border-indigo-100 select-none ml-1.5 sm:ml-2 shrink-0 shadow-xs animate-fadeIn"
                 >
@@ -915,7 +928,7 @@ export const AdminDashboard = () => {
                 <div className="mt-5 pt-5 border-t border-slate-100 animate-fadeIn space-y-4">
                   {showDashboardServiceForm && (
                     <div className="bg-slate-50/50 p-4 rounded-2xl border border-indigo-150 shadow-xs mb-4 space-y-3">
-                      <h3 className="text-xs font-bold text-indigo-600 uppercase tracking-wider text-[9px]">Criar Novo Serviço</h3>
+                      <h3 className="text-xs font-bold text-indigo-600 uppercase tracking-wider text-[9px]">{editingServiceId ? 'EDITAR SERVIÇO' : 'CRIAR NOVO SERVIÇO'}</h3>
                       <div className="grid grid-cols-1 gap-2">
                         <input 
                           type="text"
@@ -971,7 +984,12 @@ export const AdminDashboard = () => {
 
                       <div className="flex justify-end gap-2 pt-1 font-semibold">
                         <button 
-                          onClick={() => setShowDashboardServiceForm(false)} 
+                          type="button"
+                          onClick={() => {
+                            setShowDashboardServiceForm(false);
+                            setEditingServiceId(null);
+                            setNewService({ name: '', price: '', durationMinutes: '', icon: 'Scissors' });
+                          }} 
                           className="px-3 py-1.5 text-xs text-slate-500 hover:text-slate-700"
                         >
                           Cancelar
@@ -1001,13 +1019,32 @@ export const AdminDashboard = () => {
                               <p className="text-xs text-slate-500">R$ {service.price.toFixed(2)} • {service.durationMinutes} min</p>
                             </div>
                           </div>
-                          <button 
-                            onClick={() => removeService(service.id)}
-                            className="p-1.5 bg-white border border-slate-100 text-red-500 rounded-full hover:bg-red-50 hover:text-red-700 shadow-xs transition-all"
-                            title="Excluir Serviço"
-                          >
-                            <Trash2 size={14} />
-                          </button>
+                          <div className="flex items-center space-x-1.5">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setEditingServiceId(service.id);
+                                setNewService({
+                                  name: service.name,
+                                  price: String(service.price),
+                                  durationMinutes: String(service.durationMinutes),
+                                  icon: service.icon || 'Scissors'
+                                });
+                                setShowDashboardServiceForm(true);
+                              }}
+                              className="p-1.5 bg-white border border-slate-100 text-indigo-500 rounded-full hover:bg-indigo-50 hover:text-indigo-700 shadow-xs transition-all"
+                              title="Editar Serviço"
+                            >
+                              <Edit size={14} />
+                            </button>
+                            <button 
+                              onClick={() => removeService(service.id)}
+                              className="p-1.5 bg-white border border-slate-100 text-red-500 rounded-full hover:bg-red-50 hover:text-red-700 shadow-xs transition-all"
+                              title="Excluir Serviço"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </div>
                         </div>
                       );
                     })}

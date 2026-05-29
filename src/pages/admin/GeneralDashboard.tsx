@@ -244,14 +244,17 @@ export const GeneralDashboard = () => {
     !hiddenSalonIds.includes(s.id) && (
       s.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       s.adminEmail.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      s.address.toLowerCase().includes(searchTerm.toLowerCase())
+      s.address.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (s.phone && s.phone.toLowerCase().includes(searchTerm.toLowerCase())) ||
+      (s.status && s.status.toLowerCase().includes(searchTerm.toLowerCase()))
     )
   );
 
   const filteredClients = clients.filter(c => 
     c.name.toLowerCase().includes(clientSearch.toLowerCase()) ||
     c.email.toLowerCase().includes(clientSearch.toLowerCase()) ||
-    (c.phone && c.phone.includes(clientSearch))
+    (c.phone && c.phone.includes(clientSearch)) ||
+    (c.role && c.role.toLowerCase().includes(clientSearch.toLowerCase()))
   );
 
   // Stats calculation

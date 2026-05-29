@@ -82,6 +82,7 @@ interface AppContextType {
   allServices: Service[];
   addService: (service: Omit<Service, 'id'>) => void;
   removeService: (id: string) => void;
+  updateService: (id: string, service: Partial<Omit<Service, 'id'>>) => Promise<void>;
   clients: Client[];
   addClient: (client: Omit<Client, 'id'>) => void;
   updateClient: (id: string, client: Partial<Omit<Client, 'id'>>) => void;
@@ -1382,6 +1383,22 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
+  const updateService = async (id: string, fields: Partial<Omit<Service, 'id'>>) => {
+    try {
+      if (currentUser?.id.startsWith('local_')) {
+        setAllServices(prev => {
+          const updated = prev.map(s => s.id === id ? { ...s, ...fields } : s);
+          localStorage.setItem('vogue_local_services', JSON.stringify(updated));
+          return updated;
+        });
+        return;
+      }
+      await setDoc(doc(db, 'services', id), fields, { merge: true });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `services/${id}`);
+    }
+  };
+
   // Clients Directory CRUD
   const addClient = async (client: Omit<Client, 'id'>) => {
     try {
@@ -1641,6 +1658,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         allServices,
         addService,
         removeService,
+        updateService,
         clients,
         addClient,
         updateClient,
