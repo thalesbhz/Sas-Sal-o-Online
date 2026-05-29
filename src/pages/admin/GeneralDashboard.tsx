@@ -241,6 +241,7 @@ export const GeneralDashboard = () => {
 
   // Filter lists
   const filteredSalons = salons.filter(s => 
+    s.id !== 'sal_vogue_main' &&
     !hiddenSalonIds.includes(s.id) && (
       s.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       s.adminEmail.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -250,18 +251,37 @@ export const GeneralDashboard = () => {
     )
   );
 
-  const filteredClients = clients.filter(c => 
-    c.name.toLowerCase().includes(clientSearch.toLowerCase()) ||
-    c.email.toLowerCase().includes(clientSearch.toLowerCase()) ||
-    (c.phone && c.phone.includes(clientSearch)) ||
-    (c.role && c.role.toLowerCase().includes(clientSearch.toLowerCase()))
-  );
+  const filteredClients = clients.filter(c => {
+    if (c.salonId === 'sal_vogue_main') return false;
+    if (c.salonId) {
+      const associatedSalon = salons.find(s => s.id === c.salonId);
+      if (!associatedSalon || associatedSalon.status !== 'ATIVO') return false;
+    }
+    return (
+      c.name.toLowerCase().includes(clientSearch.toLowerCase()) ||
+      c.email.toLowerCase().includes(clientSearch.toLowerCase()) ||
+      (c.phone && c.phone.includes(clientSearch)) ||
+      (c.role && c.role.toLowerCase().includes(clientSearch.toLowerCase()))
+    );
+  });
 
   // Stats calculation
-  const totalSalons = salons.length;
-  const activeSalons = salons.filter(s => s.status === 'ATIVO').length;
-  const totalSysClients = clients.length;
-  const totalSysAppointments = appointments.length;
+  const totalSalons = salons.filter(s => s.id !== 'sal_vogue_main').length;
+  const activeSalons = salons.filter(s => s.id !== 'sal_vogue_main' && s.status === 'ATIVO').length;
+  const totalSysClients = clients.filter(c => {
+    if (c.salonId === 'sal_vogue_main') return false;
+    if (c.salonId) {
+      const parent = salons.find(s => s.id === c.salonId);
+      return parent && parent.status === 'ATIVO';
+    }
+    return true;
+  }).length;
+  const totalSysAppointments = appointments.filter(appt => {
+    const parentSalonId = appt.salonId || 'sal_vogue_main';
+    if (parentSalonId === 'sal_vogue_main') return false;
+    const parent = salons.find(s => s.id === parentSalonId);
+    return parent && parent.status === 'ATIVO';
+  }).length;
 
   return (
     <div id="general_admin_panel" className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans">
