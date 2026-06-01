@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, useMemo, ReactNode } from 'react';
 import { 
   collection, 
   doc, 
@@ -69,6 +69,8 @@ export interface Salon {
   appointmentCount?: number;
   clientCount?: number;
   password?: string;
+  bannerConfig?: BannerConfig;
+  businessHours?: BusinessDayHours[];
 }
 
 interface AppContextType {
@@ -104,6 +106,7 @@ interface AppContextType {
     whatsappNotifications?: boolean;
     emailNotifications?: boolean;
     password?: string;
+    salonId?: string;
   } | null;
   updateCurrentUser: (user: Partial<Omit<NonNullable<AppContextType['currentUser']>, 'id' | 'role'>>) => void;
   loginUser: (name: string, email: string, passwordInput?: string, forceAdminChecked?: boolean) => Promise<void>;
@@ -135,7 +138,7 @@ const DEFAULT_STYLISTS = [
   { id: 'p2', name: 'Juliana Reis', avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=150&h=150', rating: 4.8, services: ['s3', 's4'] },
 ];
 
-const DEFAULT_HOURS = [
+export const DEFAULT_HOURS = [
   { dayIndex: 0, dayLabel: 'Domingo', isOpen: false, openTime: '09:00', closeTime: '13:00' },
   { dayIndex: 1, dayLabel: 'Segunda-feira', isOpen: true, openTime: '08:00', closeTime: '20:00' },
   { dayIndex: 2, dayLabel: 'Terça-feira', isOpen: true, openTime: '08:00', closeTime: '20:00' },
@@ -145,7 +148,7 @@ const DEFAULT_HOURS = [
   { dayIndex: 6, dayLabel: 'Sábado', isOpen: true, openTime: '08:00', closeTime: '18:00' },
 ];
 
-const DEFAULT_BANNER = {
+export const DEFAULT_BANNER = {
   discountLabel: 'ATÉ',
   title: '45%',
   subtitle: 'TODOS OS PACOTES',
@@ -183,6 +186,18 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       localStorage.removeItem('vogue_client_selected_salon_id');
     }
   };
+
+  const effectiveBannerConfig = useMemo(() => {
+    const targetSalonId = currentUser?.role === 'ADMIN' ? currentUser.salonId : selectedSalonId;
+    const activeSalonSetting = salons.find(s => s.id === targetSalonId);
+    return activeSalonSetting?.bannerConfig || bannerConfig;
+  }, [salons, currentUser, selectedSalonId, bannerConfig]);
+
+  const effectiveBusinessHours = useMemo(() => {
+    const targetSalonId = currentUser?.role === 'ADMIN' ? currentUser.salonId : selectedSalonId;
+    const activeSalonSetting = salons.find(s => s.id === targetSalonId);
+    return activeSalonSetting?.businessHours?.length ? activeSalonSetting.businessHours : businessHours;
+  }, [salons, currentUser, selectedSalonId, businessHours]);
 
   // Connection testing + initial bootstrap trigger
   useEffect(() => {
@@ -370,6 +385,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
               instagram: data.instagram || '',
               whatsappNotifications: data.whatsappNotifications !== false,
               emailNotifications: data.emailNotifications === true,
+              salonId: data.salonId || matchedSalonId || undefined
             });
 
             if (isUserAdmin) {
@@ -1605,15 +1621,31 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   // Business Configuration CRUD
   const updateBannerConfig = async (config: Partial<BannerConfig>) => {
     try {
+      const targetSalonId = currentUser?.role === 'ADMIN' ? currentUser.salonId : selectedSalonId;
       if (currentUser?.id.startsWith('local_')) {
-        setBannerConfig(prev => {
-          const updated = { ...prev, ...config };
-          localStorage.setItem('vogue_local_banner', JSON.stringify(updated));
-          return updated;
-        });
+        if (targetSalonId) {
+          setSalons(prev => {
+            const updated = prev.map(s => s.id === targetSalonId ? { ...s, bannerConfig: { ...(s.bannerConfig || DEFAULT_BANNER), ...config } } : s);
+            localStorage.setItem('vogue_local_salons', JSON.stringify(updated));
+            return updated;
+          });
+        } else {
+          setBannerConfig(prev => {
+            const updated = { ...prev, ...config };
+            localStorage.setItem('vogue_local_banner', JSON.stringify(updated));
+            return updated;
+          });
+        }
         return;
       }
-      await setDoc(doc(db, 'bannerConfig', 'banner'), config, { merge: true });
+
+      if (targetSalonId) {
+        await setDoc(doc(db, 'salons', targetSalonId), {
+          bannerConfig: config
+        }, { merge: true });
+      } else {
+        await setDoc(doc(db, 'bannerConfig', 'banner'), config, { merge: true });
+      }
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, 'bannerConfig/banner');
     }
@@ -1621,13 +1653,29 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
 
   const updateBusinessHours = async (hours: BusinessDayHours[]) => {
     try {
+      const targetSalonId = currentUser?.role === 'ADMIN' ? currentUser.salonId : selectedSalonId;
       if (currentUser?.id.startsWith('local_')) {
-        setBusinessHours(hours);
-        localStorage.setItem('vogue_local_hours', JSON.stringify(hours));
+        if (targetSalonId) {
+          setSalons(prev => {
+            const updated = prev.map(s => s.id === targetSalonId ? { ...s, businessHours: hours } : s);
+            localStorage.setItem('vogue_local_salons', JSON.stringify(updated));
+            return updated;
+          });
+        } else {
+          setBusinessHours(hours);
+          localStorage.setItem('vogue_local_hours', JSON.stringify(hours));
+        }
         return;
       }
-      for (const h of hours) {
-        await setDoc(doc(db, 'businessHours', String(h.dayIndex)), h);
+
+      if (targetSalonId) {
+        await setDoc(doc(db, 'salons', targetSalonId), {
+          businessHours: hours
+        }, { merge: true });
+      } else {
+        for (const h of hours) {
+          await setDoc(doc(db, 'businessHours', String(h.dayIndex)), h);
+        }
       }
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, 'businessHours');
@@ -1636,15 +1684,41 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
 
   const updateSingleDayHours = async (dayIndex: number, fields: Partial<Omit<BusinessDayHours, 'dayIndex' | 'dayLabel'>>) => {
     try {
+      const targetSalonId = currentUser?.role === 'ADMIN' ? currentUser.salonId : selectedSalonId;
       if (currentUser?.id.startsWith('local_')) {
-        setBusinessHours(prev => {
-          const updated = prev.map(h => h.dayIndex === dayIndex ? { ...h, ...fields } : h);
-          localStorage.setItem('vogue_local_hours', JSON.stringify(updated));
-          return updated;
-        });
+        if (targetSalonId) {
+          setSalons(prev => {
+            const updated = prev.map(s => {
+              if (s.id === targetSalonId) {
+                const prevHs = s.businessHours || DEFAULT_HOURS;
+                const newHs = prevHs.map(h => h.dayIndex === dayIndex ? { ...h, ...fields } : h);
+                return { ...s, businessHours: newHs };
+              }
+              return s;
+            });
+            localStorage.setItem('vogue_local_salons', JSON.stringify(updated));
+            return updated;
+          });
+        } else {
+          setBusinessHours(prev => {
+            const updated = prev.map(h => h.dayIndex === dayIndex ? { ...h, ...fields } : h);
+            localStorage.setItem('vogue_local_hours', JSON.stringify(updated));
+            return updated;
+          });
+        }
         return;
       }
-      await setDoc(doc(db, 'businessHours', String(dayIndex)), fields, { merge: true });
+
+      if (targetSalonId) {
+        const activeSalonSetting = salons.find(s => s.id === targetSalonId);
+        const prevHours = activeSalonSetting?.businessHours?.length ? activeSalonSetting.businessHours : businessHours;
+        const updatedHours = prevHours.map(h => h.dayIndex === dayIndex ? { ...h, ...fields } : h);
+        await setDoc(doc(db, 'salons', targetSalonId), {
+          businessHours: updatedHours
+        }, { merge: true });
+      } else {
+        await setDoc(doc(db, 'businessHours', String(dayIndex)), fields, { merge: true });
+      }
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, `businessHours/${dayIndex}`);
     }
@@ -1753,38 +1827,52 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       await setDoc(doc(db, 'salons', id), fields, { merge: true });
 
       // Search for the associated admin client document in Firestore to update as well
-      const salonToUpdate = salons.find(s => s.id === id);
-      const adminEmailObj = fields.adminEmail || salonToUpdate?.adminEmail;
-      if (adminEmailObj) {
-        const emailLower = adminEmailObj.toLowerCase().trim();
-        const clientsQuery = query(collection(db, 'clients'), where('email', '==', emailLower));
-        const clientsSnap = await getDocs(clientsQuery);
-        
-        if (!clientsSnap.empty) {
-          clientsSnap.forEach(async (clientDoc) => {
+      try {
+        const salonToUpdate = salons.find(s => s.id === id);
+        const oldEmail = salonToUpdate?.adminEmail?.toLowerCase().trim();
+        const newEmail = (fields.adminEmail || salonToUpdate?.adminEmail || '').toLowerCase().trim();
+
+        let adminClientsDocs: any[] = [];
+        const clientsQueryBySalon = query(collection(db, 'clients'), where('salonId', '==', id), where('role', '==', 'ADMIN'));
+        const snapBySalon = await getDocs(clientsQueryBySalon);
+        if (!snapBySalon.empty) {
+          adminClientsDocs = snapBySalon.docs;
+        }
+
+        if (adminClientsDocs.length === 0 && oldEmail) {
+          const clientsQueryByEmail = query(collection(db, 'clients'), where('email', '==', oldEmail));
+          const snapByEmail = await getDocs(clientsQueryByEmail);
+          if (!snapByEmail.empty) {
+            adminClientsDocs = snapByEmail.docs;
+          }
+        }
+
+        if (adminClientsDocs.length > 0) {
+          for (const clientDoc of adminClientsDocs) {
             const clientRef = doc(db, 'clients', clientDoc.id);
             await setDoc(clientRef, {
-              name: fields.name ? (fields.name + " Admin") : clientDoc.data().name,
-              phone: fields.phone || clientDoc.data().phone,
-              password: fields.password || clientDoc.data().password,
+              email: newEmail,
+              name: fields.name ? (fields.name + " Admin") : (clientDoc.data().name || (salonToUpdate?.name ? (salonToUpdate.name + " Admin") : 'Admin')),
+              phone: fields.phone || clientDoc.data().phone || '',
+              password: fields.password || clientDoc.data().password || 'VogueAdmin123',
               role: 'ADMIN',
               salonId: id
             }, { merge: true });
 
             // Synchronize to the admins collection
             await setDoc(doc(db, 'admins', clientDoc.id), {
-              email: emailLower,
+              email: newEmail,
               role: 'ADMIN',
               salonId: id
             }, { merge: true });
-          });
-        } else {
+          }
+        } else if (newEmail) {
           // If no admin client exists for this email, create a template client doc and sync to admins
           const adminUid = 'client_admin_' + Math.random().toString(36).substring(2, 9);
           await setDoc(doc(db, 'clients', adminUid), {
             id: adminUid,
             name: (fields.name || salonToUpdate?.name || 'Salão') + " Admin",
-            email: emailLower,
+            email: newEmail,
             role: 'ADMIN',
             phone: fields.phone || salonToUpdate?.phone || '',
             avatar: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?auto=format&fit=crop&q=80&w=150&h=150',
@@ -1793,11 +1881,13 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
           }, { merge: true });
 
           await setDoc(doc(db, 'admins', adminUid), {
-            email: emailLower,
+            email: newEmail,
             role: 'ADMIN',
             salonId: id,
           }, { merge: true });
         }
+      } catch (adminSyncErr) {
+        console.warn("Subsequent admin client profile sync failed (non-blocking):", adminSyncErr);
       }
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, `salons/${id}`);
@@ -1847,10 +1937,10 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         loginUser,
         registerUser,
         logoutUser,
-        businessHours,
+        businessHours: effectiveBusinessHours,
         updateBusinessHours,
         updateSingleDayHours,
-        bannerConfig,
+        bannerConfig: effectiveBannerConfig,
         updateBannerConfig,
         authLoading,
         signInWithGoogle,

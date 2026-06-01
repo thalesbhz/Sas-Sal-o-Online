@@ -210,33 +210,48 @@ export const AdminDashboard = () => {
     }
   };
 
-  const handleSaveClient = () => {
+  const handleSaveClient = async () => {
     const avatarToSave = clientAvatarFile || clientForm.avatar;
     const clientData = {
       ...clientForm,
       avatar: avatarToSave
     };
 
-    if (editingClientId) {
-      updateClient(editingClientId, clientData);
-    } else {
-      addClient(clientData);
-    }
+    try {
+      console.log("[Front-end] Iniciando processo de salvamento do cliente:", clientData);
+      if (editingClientId) {
+        console.log(`[Front-end] Modo: EDIÇÃO. Atualizando cliente ID: ${editingClientId}`);
+        await updateClient(editingClientId, clientData);
+        console.log("[Front-end] Cliente atualizado com sucesso no Firebase!");
+      } else {
+        console.log("[Front-end] Modo: CRIAÇÃO. Chamando addClient()...");
+        await addClient(clientData);
+        console.log("[Front-end] Novo cliente inserido no Firebase com sucesso!");
+      }
 
-    setShowClientForm(false);
-    setEditingClientId(null);
-    setClientAvatarFile(null);
-    setClientForm({
-      name: '',
-      email: '',
-      phone: '',
-      avatar: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&q=80&w=150&h=150',
-      birthday: '',
-      gender: 'Feminino',
-      instagram: '',
-      whatsappNotifications: true,
-      emailNotifications: false,
-    });
+      setShowClientForm(false);
+      setEditingClientId(null);
+      setClientAvatarFile(null);
+      setClientForm({
+        name: '',
+        email: '',
+        phone: '',
+        avatar: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&q=80&w=150&h=150',
+        birthday: '',
+        gender: 'Feminino',
+        instagram: '',
+        whatsappNotifications: true,
+        emailNotifications: false,
+      });
+    } catch (err: any) {
+      console.error("[Front-end] Erro ao tentar salvar o cliente no Firestore:", err);
+      console.error("[Front-end] Detalhes do erro do cliente:", {
+        message: err?.message || String(err),
+        stack: err?.stack,
+        code: err?.code
+      });
+      alert(`Falha ao salvar cliente: ${err?.message || err}`);
+    }
   };
 
   const handleEditClientClick = (client: any) => {
@@ -2130,9 +2145,21 @@ export const AdminDashboard = () => {
                           </button>
                           <button
                             type="button"
-                            onClick={() => {
+                            onClick={async () => {
                               if (window.confirm(`Tem certeza que deseja excluir o cliente ${client.name}? Todos os registros de perfil serão apagados permanentemente.`)) {
-                                removeClient(client.id);
+                                try {
+                                  console.log(`[Front-end] Iniciando exclusão do cliente "${client.name}" com ID: ${client.id}`);
+                                  await removeClient(client.id);
+                                  console.log(`[Front-end] Cliente "${client.name}" (ID: ${client.id}) excluído com sucesso do Firebase!`);
+                                } catch (err: any) {
+                                  console.error(`[Front-end] Erro ao tentar excluir o cliente "${client.name}" (ID: ${client.id}):`, err);
+                                  console.error("[Front-end] Detalhes do erro de exclusão do cliente:", {
+                                    message: err?.message || String(err),
+                                    stack: err?.stack,
+                                    code: err?.code
+                                  });
+                                  alert(`Falha ao excluir cliente: ${err?.message || err}`);
+                                }
                               }
                             }}
                             className="p-2 text-slate-500 hover:text-rose-600 bg-slate-50 hover:bg-rose-50 rounded-xl transition-all"

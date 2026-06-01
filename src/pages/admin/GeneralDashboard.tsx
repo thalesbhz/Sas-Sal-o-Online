@@ -200,7 +200,9 @@ export const GeneralDashboard = () => {
     }
 
     try {
+      console.log("[Front-end] Iniciando processo de salvamento do salão:", { name, adminEmail, phone, address, status });
       if (editingSalon) {
+        console.log("[Front-end] Modo: EDIÇÃO. Atualizando salão ID:", editingSalon.id);
         await updateSalon(editingSalon.id, {
           name,
           adminEmail,
@@ -209,15 +211,19 @@ export const GeneralDashboard = () => {
           status,
           password: password.trim()
         });
+        console.log("[Front-end] Salão atualizado com sucesso no Firebase!");
         showNotification('success', 'Salão atualizado com sucesso!');
       } else {
+        console.log("[Front-end] Modo: CRIAÇÃO. Verificando se o e-mail de administrador já existe...");
         // Prevent duplicate manager email in registered salon admins helper check
         const emailExists = salons.some(s => s.adminEmail.toLowerCase() === adminEmail.toLowerCase().trim());
         if (emailExists) {
+          console.warn("[Front-end] Conflito detectado: O e-mail do administrador já está registrado para outro salão:", adminEmail);
           setErrorMsg('Já existe um salão cadastrado para este e-mail de administrador.');
           return;
         }
 
+        console.log("[Front-end] Chamando addSalon()...");
         const newId = await addSalon({
           name,
           adminEmail: adminEmail.toLowerCase().trim(),
@@ -226,6 +232,7 @@ export const GeneralDashboard = () => {
           status,
           password: password.trim()
         });
+        console.log("[Front-end] Novo salão adicionado com sucesso! ID gerado:", newId);
         showNotification('success', 'Novo salão e administrador cadastrados!');
         if (newId) {
           setNewlyCreatedSalonLink({ id: newId, name });
@@ -233,6 +240,12 @@ export const GeneralDashboard = () => {
       }
       setIsModalOpen(false);
     } catch (err: any) {
+      console.error("[Front-end] Ocorreu um erro ao salvar o salão no Firestore:", err);
+      console.error("[Front-end] Código de erro/Detalhes:", {
+        message: err?.message || String(err),
+        stack: err?.stack,
+        code: err?.code
+      });
       setErrorMsg(err.message || 'Erro ao salvar informações do salão.');
     }
   };
@@ -240,9 +253,17 @@ export const GeneralDashboard = () => {
   const handleDeleteSalon = async (id: string, salonName: string) => {
     if (window.confirm(`Tem certeza de que deseja remover o salão "${salonName}"? Isso removerá o cadastro e acesso às configurações desse salão.`)) {
       try {
+        console.log(`[Front-end] Solicitando exclusão do salão "${salonName}" com ID: ${id}`);
         await removeSalon(id);
+        console.log(`[Front-end] Salão "${salonName}" (ID: ${id}) excluído com sucesso do Firebase!`);
         showNotification('success', 'Salão removido com sucesso!');
       } catch (err: any) {
+        console.error(`[Front-end] Erro ao tentar remover o salão "${salonName}" (ID: ${id}):`, err);
+        console.error("[Front-end] Código de erro/Detalhes de exclusão:", {
+          message: err?.message || String(err),
+          stack: err?.stack,
+          code: err?.code
+        });
         showNotification('error', err.message || 'Falha ao remover o salão.');
       }
     }
